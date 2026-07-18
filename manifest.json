@@ -1,0 +1,37 @@
+{
+  "name": "Сканер чеков ФНС",
+  "short_name": "Чеки ФНС",
+  "description": "Сканер QR-кодов с чеков для автоматизации 1С",
+  "start_url": "/scanner.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#667eea",
+  "theme_color": "#4CAF50",
+  "scope": "/",
+  "lang": "ru",
+  "categories": ["finance", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2829/2829836.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2829/2829836.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Сканировать чек",
+      "short_name": "Сканировать",
+      "description": "Начать сканирование QR-кода",
+      "url": "/scanner.html?scan=1",
+      "icons": [{"src": "https://cdn-icons-png.flaticon.com/512/2829/2829836.png", "sizes": "192x192"}]
+    }
+  ]
+}

@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#4CAF50">
+    <meta name="description" content="Сканер QR-кодов с чеков для 1С">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Сканер чеков ФНС</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 15px;
+        }
+        .container { 
+            background: white; 
+            border-radius: 20px; 
+            padding: 20px; 
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h1 { 
+            color: #333; 
+            text-align: center; 
+            margin-bottom: 20px; 
+            font-size: 24px;
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+            margin-bottom: 15px;
+        }
+        #video { 
+            width: 100%; 
+            display: block;
+        }
+        .scan-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 250px;
+            height: 250px;
+            border: 3px solid #4CAF50;
+            border-radius: 12px;
+            pointer-events: none;
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+        }
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 3px;
+            background: #4CAF50;
+            animation: scan 2s linear infinite;
+            box-shadow: 0 0 10px #4CAF50;
+        }
+        @keyframes scan {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+        .button { 
+            display: block; 
+            width: 100%; 
+            padding: 16px; 
+            margin: 8px 0; 
+            font-size: 16px; 
+            font-weight: bold; 
+            border: none; 
+            border-radius: 12px; 
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .button:active { transform: scale(0.98); }
+        .btn-scan { background: #4CAF50; color: white; }
+        .btn-scan.scanning { background: #ff9800; }
+        .btn-export { background: #2196F3; color: white; }
+        .btn-clear { background: #f44336; color: white; }
+        #status { 
+            padding: 14px; 
+            margin: 15px 0; 
+            border-radius: 10px; 
+            display: none; 
+            text-align: center; 
+            font-weight: bold;
+            animation: slideIn 0.3s;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .success { background: #d4edda; color: #155724; border: 2px solid #c3e6cb; }
+        .error { background: #fff3cd; color: #856404; border: 2px solid #ffeaa7; }
+        .info { background: #d1ecf1; color: #0c5460; border: 2px solid #bee5eb; }
+        .stats { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px; 
+            border-radius: 12px; 
+            text-align: center; 
+            margin: 15px 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .codes-container {
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .code-item { 
+            padding: 12px; 
+            margin: 8px 0; 
+            background: #f8f9fa; 
+            border-left: 5px solid #4CAF50; 
+            border-radius: 8px; 
+            font-family: monospace; 
+            font-size: 11px; 
+            word-break: break-all;
+            transition: all 0.3s;
+        }
+        .code-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 12px;
+            color: #333;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            font-style: italic;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            color: rgba(255,255,255,0.8);
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛒 Сканер чеков ФНС</h1>
+        
+        <div class="video-container">
+            <video id="video" playsinline></video>
+            <div class="scan-overlay">
+                <div class="scan-line"></div>
+            </div>
+        </div>
+        
+        <button class="button btn-scan" id="scanBtn" onclick="toggleScan()">📷 Начать сканирование</button>
+        <button class="button btn-export" onclick="exportCodes()">📥 Экспорт в файл</button>
+        <button class="button btn-clear" onclick="clearCodes()">🗑️ Очистить все</button>
+        
+        <div id="status"></div>
+        
+        <div class="stats">
+            📊 Сохранено чеков: <span id="count">0</span>
+        </div>
+        
+        <div class="codes-container" id="codes-list">
+            <div class="empty-state">Нет сохраненных чеков<br>Отсканируйте первый чек!</div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        v1.0 | Данные сохраняются локально
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <script>
+        let video = document.getElementById('video');
+        let canvas = document.createElement('canvas');
+        let context = canvas.getContext('2d');
+        let scanning = false;
+        let scanTimeout = null;
+        let stream = null;
+
+        // Регистрация Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('SW registered:', reg))
+                .catch(err => console.log('SW error:', err));
+        }
+
+        window.onload = function() { 
+            loadSavedCodes();
+            checkCameraPermission();
+        };
+
+        function checkCameraPermission() {
+            navigator.permissions.query({ name: 'camera' })
+                .then(result => {
+                    if (result.state === 'denied') {
+                        showStatus('⚠️ Доступ к камере запрещен. Разрешите в настройках браузера.', 'error');
+                    }
+                });
+        }
+
+        function toggleScan() {
+            if (scanning) {
+                stopScan();
+            } else {
+                startScan();
+            }
+        }
+
+        function startScan() {
+            navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode: "environment",
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                } 
+            })
+            .then(function(mediaStream) {
+                stream = mediaStream;
+                video.srcObject = stream;
+                video.play();
+                scanning = true;
+                
+                const btn = document.getElementById('scanBtn');
+                btn.textContent = '️ Остановить камеру';
+                btn.classList.add('scanning');
+                
+                showStatus('📡 Наведите камеру на QR-код чека', 'info');
+                requestAnimationFrame(tick);
+            })
+            .catch(function(err) {
+                console.error('Camera error:', err);
+                showStatus('❌ Ошибка камеры: ' + err.message, 'error');
+            });
+        }
+
+        function stopScan() {
+            scanning = false;
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            if (scanTimeout) {
+                clearTimeout(scanTimeout);
+                scanTimeout = null;
+            }
+            
+            const btn = document.getElementById('scanBtn');
+            btn.textContent = '📷 Начать сканирование';
+            btn.classList.remove('scanning');
+            
+            showStatus('Камера остановлена', 'error');
+        }
+
+        function tick() {
+            if (!scanning) return;
+            
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                let imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                let code = jsQR(imageData.data, imageData.width, imageData.height);
+                
+                if (code) {
+                    handleScan(code.data);
+                    return;
+                }
+            }
+            requestAnimationFrame(tick);
+        }
+
+        function handleScan(qrData) {
+            let codes = JSON.parse(localStorage.getItem('receipts') || '[]');
+            
+            if (codes.includes(qrData)) {
+                showStatus('️ Этот чек уже сохранен!', 'error');
+                if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            } else {
+                codes.push(qrData);
+                localStorage.setItem('receipts', JSON.stringify(codes));
+                
+                if (navigator.vibrate) navigator.vibrate(200);
+                showStatus('✅ Чек #' + codes.length + ' сохранен!', 'success');
+                loadSavedCodes();
+            }
+            
+            // Авто-перезапуск камеры через 1.5 сек
+            scanning = false;
+            scanTimeout = setTimeout(() => {
+                if (document.getElementById('scanBtn').classList.contains('scanning')) {
+                    scanning = true;
+                    requestAnimationFrame(tick);
+                }
+            }, 1500);
+        }
+
+        function loadSavedCodes() {
+            let codes = JSON.parse(localStorage.getItem('receipts') || '[]');
+            document.getElementById('count').textContent = codes.length;
+            
+            const list = document.getElementById('codes-list');
+            
+            if (codes.length === 0) {
+                list.innerHTML = '<div class="empty-state">Нет сохраненных чеков<br>Отсканируйте первый чек!</div>';
+                return;
+            }
+            
+            list.innerHTML = '';
+            // Показываем последние 10 чеков
+            const displayCodes = codes.slice(-10).reverse();
+            
+            displayCodes.forEach((code, index) => {
+                const realIndex = codes.length - index;
+                const div = document.createElement('div');
+                div.className = 'code-item';
+                
+                // Извлекаем дату и сумму из QR для красивого отображения
+                let info = parseQRCode(code);
+                
+                div.innerHTML = `
+                    <div class="code-header">
+                        <span>Чек #${realIndex}</span>
+                        <span>${info.date || 'Дата не найдена'}</span>
+                    </div>
+                    <div>${code}</div>
+                `;
+                list.appendChild(div);
+            });
+            
+            if (codes.length > 10) {
+                const more = document.createElement('div');
+                more.className = 'code-item';
+                more.style.textAlign = 'center';
+                more.style.color = '#666';
+                more.style.fontStyle = 'italic';
+                more.textContent = `... и еще ${codes.length - 10} чеков`;
+                list.appendChild(more);
+            }
+        }
+
+        function parseQRCode(qrData) {
+            let result = { date: null, sum: null };
+            const params = new URLSearchParams(qrData);
+            
+            const t = params.get('t');
+            if (t) {
+                // Формат: 20231025T1530
+                const year = t.substr(0, 4);
+                const month = t.substr(4, 2);
+                const day = t.substr(6, 2);
+                result.date = `${day}.${month}.${year}`;
+            }
+            
+            const s = params.get('s');
+            if (s) {
+                result.sum = parseFloat(s);
+            }
+            
+            return result;
+        }
+
+        function exportCodes() {
+            let codes = JSON.parse(localStorage.getItem('receipts') || '[]');
+            
+            if (codes.length === 0) {
+                showStatus('❌ Нет сохраненных чеков для экспорта', 'error');
+                return;
+            }
+            
+            const dateStr = new Date().toISOString().slice(0,10);
+            const timeStr = new Date().toISOString().slice(11,19).replace(/:/g, '-');
+            const filename = `receipts_${dateStr}_${timeStr}.txt`;
+            
+            const text = codes.join('\n');
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showStatus(`📥 Файл ${filename} скачан!`, 'success');
+        }
+
+        function clearCodes() {
+            let codes = JSON.parse(localStorage.getItem('receipts') || '[]');
+            const count = codes.length;
+            
+            if (count === 0) {
+                showStatus('Нет чеков для удаления', 'error');
+                return;
+            }
+            
+            if (confirm(`⚠️ Удалить ВСЕ ${count} чеков?\n\nЭто действие нельзя отменить!`)) {
+                localStorage.removeItem('receipts');
+                loadSavedCodes();
+                showStatus('🗑️ Все чеки удалены', 'success');
+                if (navigator.vibrate) navigator.vibrate(100);
+            }
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = type;
+            status.style.display = 'block';
+            
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 4000);
+        }
+    </script>
+</body>
+</html>
