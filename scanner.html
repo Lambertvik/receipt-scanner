@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#4CAF50">
+    <meta name="description" content="Сканер чеков ФНС">
+    <title>Сканер чеков</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-top: 0;
+        }
+        #video {
+            width: 100%;
+            border-radius: 12px;
+            background: #000;
+        }
+        .button {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .button:active {
+            transform: scale(0.98);
+        }
+        .btn-scan {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-clear {
+            background: #f44336;
+            color: white;
+        }
+        .btn-export {
+            background: #2196F3;
+            color: white;
+        }
+        #status {
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 8px;
+            display: none;
+            text-align: center;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        #saved-codes {
+            margin-top: 20px;
+        }
+        .code-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: #f8f9fa;
+            border-left: 4px solid #4CAF50;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+            word-break: break-all;
+        }
+        .stats {
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛒 Сканер чеков</h1>
+        
+        <video id="video" playsinline></video>
+        
+        <button class="button btn-scan" onclick="startScan()">📷 Начать сканирование</button>
+        <button class="button btn-export" onclick="exportCodes()"> Экспорт в файл</button>
+        <button class="button btn-clear" onclick="clearCodes()">🗑️ Очистить все</button>
+        
+        <div id="status"></div>
+        
+        <div id="saved-codes">
+            <div class="stats">
+                <strong>Сохранено чеков: <span id="count">0</span></strong>
+            </div>
+            <div id="codes-list"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <script>
+        let video = document.getElementById('video');
+        let canvas = document.createElement('canvas');
+        let context = canvas.getContext('2d');
+        let scanning = false;
+        
+        // Регистрация Service Worker для PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(() => console.log('Service Worker зарегистрирован'))
+                .catch(err => console.log('SW error:', err));
+        }
+        
+        window.onload = function() {
+            loadSavedCodes();
+        };
+        
+        function startScan() {
+            if (scanning) return;
+            
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                .then(function(stream) {
+                    video.srcObject = stream;
+                    video.play();
+                    scanning = true;
+                    showStatus('📡 Сканирование активно. Наведите камеру на QR-код', 'success');
+                    requestAnimationFrame(tick);
+                })
+                .catch(function(err) {
+                    showStatus('❌ Ошибка камеры: ' + err.message, 'error');
+                });
+        }
+        
+        function tick() {
+            if (!scanning) return;
+            
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                let imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                let code = jsQR(imageData.data, imageData.width, imageData.height);
+                
+                if (code) {
+                    saveCode(code.data);
+                    scanning = false;
+                    video.srcObject.getTracks().forEach(track => track.stop());
+                }
+            }
+            
+            requestAnimationFrame(tick);
+        }
+        
+        function saveCode(qrData) {
+            let codes = JSON.parse(localStorage.getItem('receipts') || '[]');
+            
+            if (codes.includes(qrData)) {
+                showStatus('⚠️ Этот чек уже сохранен!', 'error');
+                return;
+            }
+            
+            codes.push(qrData);
+            localStorage.setItem('receipts', JSON.stringify(codes));
+            
+            showStatus('✅ Чек сохранен! Всего: ' + codes.length, 'success');
+            loadSavedCodes();
+        }
+        
+        function loadSavedCodes() {
+            let codes = JSON.parse(localStorage.getItem('receipts') || '[]');
+            document.getElementById('count').textContent = codes.length;
+            
+            let list = document.getElementById('codes-list');
+            list.innerHTML = '';
+            
+            codes.slice().reverse().forEach((code, index) => {
+                let div = document.createElement('div');
+                div.className = 'code-item';
+                div.textContent = '#' + (codes.length - index) + ' ' + code;
+                list.appendChild(div);
+            });
+        }
+        
+        function exportCodes() {
+            let codes = JSON.parse(localStorage.getItem('receipts') || '[]');
+            
+            if (codes.length === 0) {
+                showStatus('Нет сохраненных чеков', 'error');
+                return;
+            }
+            
+            let text = codes.join('\n');
+            let blob = new Blob([text], { type: 'text/plain' });
+            let url = URL.createObjectURL(blob);
+            let a = document.createElement('a');
+            a.href = url;
+            a.download = 'receipts_' + new Date().toISOString().slice(0,10) + '.txt';
+            a.click();
+            
+            showStatus('📥 Файл экспортирован!', 'success');
+        }
+        
+        function clearCodes() {
+            if (confirm('Удалить все сохраненные чеки?')) {
+                localStorage.removeItem('receipts');
+                loadSavedCodes();
+                showStatus('🗑️ Все чеки удалены', 'success');
+            }
+        }
+        
+        function showStatus(message, type) {
+            let status = document.getElementById('status');
+            status.textContent = message;
+            status.className = type;
+            status.style.display = 'block';
+            
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 4000);
+        }
+    </script>
+</body>
+</html>
