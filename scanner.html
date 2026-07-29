@@ -206,150 +206,176 @@
         }
 
         async function handleScan(qrData) {
-            let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
-            
-            if (receipts.some(r => r.qr === qrData)) {
-                addLog('⚠️ Чек уже сохранен!', 'error');
-                return;
-            }
+    let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
+    
+    if (receipts.some(r => r.qr === qrData)) {
+        addLog('⚠️ Чек уже сохранен!', 'error');
+        return;
+    }
 
-            if (API_TOKEN === "ВАШ_ТОКЕН_ЗДЕСЬ" || API_TOKEN === "") {
-                addLog('❌ ТОКЕН НЕ ВПИСАН В КОД!', 'error');
-                return;
-            }
+    if (API_TOKEN === "ВАШ_ТОКЕН_ЗДЕСЬ" || API_TOKEN === "") {
+        addLog('❌ ТОКЕН НЕ ВПИСАН В КОД!', 'error');
+        return;
+    }
 
-            addLog('🔄 Тестируем API...', 'info');
-            addLog('QR: ' + qrData.substring(0, 50) + '...', 'info');
-            
-            let success = false;
-            
-            // ВАРИАНТ 1: POST с токеном в Authorization header
-            if (!success) {
-                try {
-                    addLog('Тест 1: POST + Authorization header', 'info');
-                    const response = await fetch('https://proverkacheka.com/api/v1/check/get', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'Authorization': 'Token ' + API_TOKEN
-                        },
-                        body: JSON.stringify({ qr: qrData })
-                    });
-                    
-                    const text = await response.text();
-                    addLog('Тест 1: HTTP ' + response.status + ' -> ' + text.substring(0, 150), 'info');
-                    
-                    if (text !== 'Offline' && text.trim() !== '') {
-                        const data = JSON.parse(text);
-                        processSuccess(data, qrData, receipts);
-                        success = true;
-                    }
-                } catch (error) {
-                    addLog('Тест 1 ошибка: ' + error.message, 'error');
+    addLog('🔄 Тестируем авторизацию...', 'info');
+    addLog('QR: ' + qrData.substring(0, 50) + '...', 'info');
+    
+    let success = false;
+    
+    // ВАРИАНТ 1: GET + Authorization: Token
+    if (!success) {
+        try {
+            addLog('Тест 1: GET + Authorization: Token', 'info');
+            const url = 'https://proverkacheka.com/api/v1/check/get?qr=' + encodeURIComponent(qrData);
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': 'Token ' + API_TOKEN
                 }
+            });
+            const text = await response.text();
+            addLog('Тест 1: ' + text.substring(0, 200), 'info');
+            if (text.includes('"code":0') || text.includes('"success":true')) {
+                processSuccess(JSON.parse(text), qrData, receipts);
+                success = true;
             }
-            
-            // ВАРИАНТ 2: POST с токеном в body
-            if (!success) {
-                try {
-                    addLog('Тест 2: POST + token в body', 'info');
-                    const response = await fetch('https://proverkacheka.com/api/v1/check/get', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify({ token: API_TOKEN, qr: qrData })
-                    });
-                    
-                    const text = await response.text();
-                    addLog('Тест 2: HTTP ' + response.status + ' -> ' + text.substring(0, 150), 'info');
-                    
-                    if (text !== 'Offline' && text.trim() !== '') {
-                        const data = JSON.parse(text);
-                        processSuccess(data, qrData, receipts);
-                        success = true;
-                    }
-                } catch (error) {
-                    addLog('Тест 2 ошибка: ' + error.message, 'error');
-                }
-            }
-            
-            // ВАРИАНТ 3: GET с параметрами
-            if (!success) {
-                try {
-                    addLog('Тест 3: GET с параметрами', 'info');
-                    const url = 'https://proverkacheka.com/api/v1/check/get?token=' + API_TOKEN + '&qr=' + encodeURIComponent(qrData);
-                    const response = await fetch(url, {
-                        method: 'GET',
-                        headers: { 'Accept': 'application/json' }
-                    });
-                    
-                    const text = await response.text();
-                    addLog('Тест 3: HTTP ' + response.status + ' -> ' + text.substring(0, 150), 'info');
-                    
-                    if (text !== 'Offline' && text.trim() !== '') {
-                        const data = JSON.parse(text);
-                        processSuccess(data, qrData, receipts);
-                        success = true;
-                    }
-                } catch (error) {
-                    addLog('Тест 3 ошибка: ' + error.message, 'error');
-                }
-            }
-            
-            // ВАРИАНТ 4: Другой endpoint
-            if (!success) {
-                try {
-                    addLog('Тест 4: POST на /api/v1/check', 'info');
-                    const response = await fetch('https://proverkacheka.com/api/v1/check', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'Authorization': 'Token ' + API_TOKEN
-                        },
-                        body: JSON.stringify({ qr: qrData })
-                    });
-                    
-                    const text = await response.text();
-                    addLog('Тест 4: HTTP ' + response.status + ' -> ' + text.substring(0, 150), 'info');
-                    
-                    if (text !== 'Offline' && text.trim() !== '') {
-                        const data = JSON.parse(text);
-                        processSuccess(data, qrData, receipts);
-                        success = true;
-                    }
-                } catch (error) {
-                    addLog('Тест 4 ошибка: ' + error.message, 'error');
-                }
-            }
-            
-            if (!success) {
-                addLog('❌ Все варианты API не сработали', 'error');
-                receipts.push({
-                    qr: qrData,
-                    date: parseQRDate(qrData),
-                    total: parseQRSum(qrData),
-                    items: [],
-                    timestamp: Date.now(),
-                    status: 'partial',
-                    apiError: 'API Offline'
-                });
-                localStorage.setItem('receipts', JSON.stringify(receipts));
-                loadSavedCodes();
-            }
-            
-            scanning = false;
-            scanTimeout = setTimeout(() => {
-                if (document.getElementById('scanBtn').classList.contains('scanning')) {
-                    scanning = true;
-                    requestAnimationFrame(tick);
-                }
-            }, 1500);
+        } catch (error) {
+            addLog('Тест 1 ошибка: ' + error.message, 'error');
         }
-
+    }
+    
+    // ВАРИАНТ 2: GET + Authorization: Bearer
+    if (!success) {
+        try {
+            addLog('Тест 2: GET + Authorization: Bearer', 'info');
+            const url = 'https://proverkacheka.com/api/v1/check/get?qr=' + encodeURIComponent(qrData);
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': 'Bearer ' + API_TOKEN
+                }
+            });
+            const text = await response.text();
+            addLog('Тест 2: ' + text.substring(0, 200), 'info');
+            if (text.includes('"code":0') || text.includes('"success":true')) {
+                processSuccess(JSON.parse(text), qrData, receipts);
+                success = true;
+            }
+        } catch (error) {
+            addLog('Тест 2 ошибка: ' + error.message, 'error');
+        }
+    }
+    
+    // ВАРИАНТ 3: GET + параметр api_key
+    if (!success) {
+        try {
+            addLog('Тест 3: GET + api_key', 'info');
+            const url = 'https://proverkacheka.com/api/v1/check/get?qr=' + encodeURIComponent(qrData) + '&api_key=' + API_TOKEN;
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+            });
+            const text = await response.text();
+            addLog('Тест 3: ' + text.substring(0, 200), 'info');
+            if (text.includes('"code":0') || text.includes('"success":true')) {
+                processSuccess(JSON.parse(text), qrData, receipts);
+                success = true;
+            }
+        } catch (error) {
+            addLog('Тест 3 ошибка: ' + error.message, 'error');
+        }
+    }
+    
+    // ВАРИАНТ 4: GET + параметр key
+    if (!success) {
+        try {
+            addLog('Тест 4: GET + key', 'info');
+            const url = 'https://proverkacheka.com/api/v1/check/get?qr=' + encodeURIComponent(qrData) + '&key=' + API_TOKEN;
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+            });
+            const text = await response.text();
+            addLog('Тест 4: ' + text.substring(0, 200), 'info');
+            if (text.includes('"code":0') || text.includes('"success":true')) {
+                processSuccess(JSON.parse(text), qrData, receipts);
+                success = true;
+            }
+        } catch (error) {
+            addLog('Тест 4 ошибка: ' + error.message, 'error');
+        }
+    }
+    
+    // ВАРИАНТ 5: GET + X-Token header
+    if (!success) {
+        try {
+            addLog('Тест 5: GET + X-Token header', 'info');
+            const url = 'https://proverkacheka.com/api/v1/check/get?qr=' + encodeURIComponent(qrData);
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Token': API_TOKEN
+                }
+            });
+            const text = await response.text();
+            addLog('Тест 5: ' + text.substring(0, 200), 'info');
+            if (text.includes('"code":0') || text.includes('"success":true')) {
+                processSuccess(JSON.parse(text), qrData, receipts);
+                success = true;
+            }
+        } catch (error) {
+            addLog('Тест 5 ошибка: ' + error.message, 'error');
+        }
+    }
+    
+    // ВАРИАНТ 6: Только ID токена (без части после точки)
+    if (!success) {
+        try {
+            const tokenId = API_TOKEN.split('.')[0]; // "53441"
+            addLog('Тест 6: GET + token ID только (' + tokenId + ')', 'info');
+            const url = 'https://proverkacheka.com/api/v1/check/get?qr=' + encodeURIComponent(qrData) + '&token=' + tokenId;
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+            });
+            const text = await response.text();
+            addLog('Тест 6: ' + text.substring(0, 200), 'info');
+            if (text.includes('"code":0') || text.includes('"success":true')) {
+                processSuccess(JSON.parse(text), qrData, receipts);
+                success = true;
+            }
+        } catch (error) {
+            addLog('Тест 6 ошибка: ' + error.message, 'error');
+        }
+    }
+    
+    if (!success) {
+        addLog('❌ Все варианты авторизации не сработали', 'error');
+        receipts.push({
+            qr: qrData,
+            date: parseQRDate(qrData),
+            total: parseQRSum(qrData),
+            items: [],
+            timestamp: Date.now(),
+            status: 'partial',
+            apiError: '401 Unauthorized'
+        });
+        localStorage.setItem('receipts', JSON.stringify(receipts));
+        loadSavedCodes();
+    }
+    
+    scanning = false;
+    scanTimeout = setTimeout(() => {
+        if (document.getElementById('scanBtn').classList.contains('scanning')) {
+            scanning = true;
+            requestAnimationFrame(tick);
+        }
+    }, 1500);
+}
         function processSuccess(data, qrData, receipts) {
             const receiptData = data.data || data;
             
