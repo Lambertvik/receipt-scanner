@@ -197,58 +197,23 @@
                 '💾 Кэш: ' + cacheCount + ' чеков | API: ' + todayRequests + '/15 запросов сегодня | Всего: ' + receipts.length;
         }
 
-        function toggleScan() {
-    try {
-        if (scanning) {
-            stopScan();
-        } else {
-            startScan();
-        }
-    } catch (error) {
-        alert('❌ Ошибка запуска камеры: ' + error.message);
-        console.error('Toggle error:', error);
-    }
-}
+        function toggleScan() { scanning ? stopScan() : startScan(); }
 
         function startScan() {
-    try {
-        addLog('🔄 Запуск камеры...', 'info');
-        
-        navigator.mediaDevices.getUserMedia({ 
-            video: { 
-                facingMode: "environment",
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            } 
-        })
-        .then(function(mediaStream) {
-            stream = mediaStream;
-            video.srcObject = stream;
-            video.play();
-            scanning = true;
-            
-            const btn = document.getElementById('scanBtn');
-            btn.textContent = '⏹️ Остановить камеру';
-            btn.classList.add('scanning');
-            
-            addLog('📡 Камера запущена', 'success');
-            requestAnimationFrame(tick);
-        })
-        .catch(function(err) {
-            console.error('Camera error:', err);
-            addLog('❌ Ошибка камеры: ' + err.message, 'error');
-            alert('❌ Не удалось запустить камеру!\n\nПроверьте:\n1. Разрешения на камеру в настройках браузера\n2. HTTPS соединение (не HTTP)\n3. Ошибку: ' + err.message);
-            
-            scanning = false;
-            const btn = document.getElementById('scanBtn');
-            btn.textContent = '📷 Начать сканирование';
-            btn.classList.remove('scanning');
-        });
-    } catch (error) {
-        console.error('StartScan error:', error);
-        alert('❌ Ошибка: ' + error.message);
-    }
-}
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } })
+            .then(function(mediaStream) {
+                stream = mediaStream;
+                video.srcObject = stream;
+                video.play();
+                scanning = true;
+                const btn = document.getElementById('scanBtn');
+                btn.textContent = '⏹️ Остановить камеру';
+                btn.classList.add('scanning');
+                addLog('📡 Камера запущена', 'info');
+                requestAnimationFrame(tick);
+            })
+            .catch(function(err) { addLog('❌ Ошибка камеры: ' + err.message, 'error'); });
+        }
 
         function stopScan() {
             scanning = false;
@@ -638,23 +603,14 @@
         }
 
         function clearCodes() {
-    let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
-    if (receipts.length === 0) { 
-        alert('Нет чеков для удаления');
-        return; 
-    }
-    if (confirm('⚠️ Удалить ВСЕ ' + receipts.length + ' чеков и кэш?\n\nЭто действие нельзя отменить!')) {
-        // Очищаем ВСЕ хранилища
-        localStorage.removeItem('receipts');
-        localStorage.removeItem('receipts_cache');
-        localStorage.removeItem('daily_stats');
-        
-        loadSavedCodes();
-        updateCacheInfo();
-        addLog('🗑️ Все чеки и кэш удалены', 'success');
-        alert('✅ Все чеки удалены! Можно сканировать заново.');
-    }
-}
+            let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
+            if (receipts.length === 0) { addLog('Нет чеков для удаления', 'error'); return; }
+            if (confirm('⚠️ Удалить ВСЕ ' + receipts.length + ' чеков и кэш?')) {
+                localStorage.removeItem('receipts');
+                localStorage.removeItem('receipts_cache');
+                loadSavedCodes();
+                updateCacheInfo();
+                addLog('🗑️ Все чеки и кэш удалены', 'success');
             }
         }
     </script>
