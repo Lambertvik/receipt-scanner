@@ -197,23 +197,58 @@
                 '💾 Кэш: ' + cacheCount + ' чеков | API: ' + todayRequests + '/15 запросов сегодня | Всего: ' + receipts.length;
         }
 
-        function toggleScan() { scanning ? stopScan() : startScan(); }
+        function toggleScan() {
+    try {
+        if (scanning) {
+            stopScan();
+        } else {
+            startScan();
+        }
+    } catch (error) {
+        alert('❌ Ошибка запуска камеры: ' + error.message);
+        console.error('Toggle error:', error);
+    }
+}
 
         function startScan() {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } })
-            .then(function(mediaStream) {
-                stream = mediaStream;
-                video.srcObject = stream;
-                video.play();
-                scanning = true;
-                const btn = document.getElementById('scanBtn');
-                btn.textContent = '⏹️ Остановить камеру';
-                btn.classList.add('scanning');
-                addLog('📡 Камера запущена', 'info');
-                requestAnimationFrame(tick);
-            })
-            .catch(function(err) { addLog('❌ Ошибка камеры: ' + err.message, 'error'); });
-        }
+    try {
+        addLog('🔄 Запуск камеры...', 'info');
+        
+        navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                facingMode: "environment",
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            } 
+        })
+        .then(function(mediaStream) {
+            stream = mediaStream;
+            video.srcObject = stream;
+            video.play();
+            scanning = true;
+            
+            const btn = document.getElementById('scanBtn');
+            btn.textContent = '⏹️ Остановить камеру';
+            btn.classList.add('scanning');
+            
+            addLog('📡 Камера запущена', 'success');
+            requestAnimationFrame(tick);
+        })
+        .catch(function(err) {
+            console.error('Camera error:', err);
+            addLog('❌ Ошибка камеры: ' + err.message, 'error');
+            alert('❌ Не удалось запустить камеру!\n\nПроверьте:\n1. Разрешения на камеру в настройках браузера\n2. HTTPS соединение (не HTTP)\n3. Ошибку: ' + err.message);
+            
+            scanning = false;
+            const btn = document.getElementById('scanBtn');
+            btn.textContent = '📷 Начать сканирование';
+            btn.classList.remove('scanning');
+        });
+    } catch (error) {
+        console.error('StartScan error:', error);
+        alert('❌ Ошибка: ' + error.message);
+    }
+}
 
         function stopScan() {
             scanning = false;
