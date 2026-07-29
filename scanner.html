@@ -461,31 +461,15 @@
             }
         }
 
-        function showStatus(message, type) {
+function showStatus(message, type) {
     const status = document.getElementById('status');
     status.textContent = message;
     status.className = type;
     status.style.display = 'block';
-    status.style.cursor = 'pointer';
-    status.title = 'Нажмите, чтобы скопировать текст ошибки';
     
-    // Для ошибок показываем дольше (15 секунд вместо 5)
-    const timeout = type === 'error' ? 15000 : 5000;
-    
-    // Клик по статусу - копирует текст в буфер обмена
-    status.onclick = function() {
-        navigator.clipboard.writeText(message).then(() => {
-            const originalText = status.textContent;
-            status.textContent = '✅ Скопировано!';
-            setTimeout(() => {
-                status.textContent = originalText;
-            }, 1000);
-        });
-    };
-    
-    setTimeout(() => { 
-        status.style.display = 'none'; 
-    }, timeout);
+    // Ошибки показываем 30 секунд, успехи — 5 секунд
+    const timeout = (type === 'error') ? 90000 : 5000;
+    setTimeout(() => { status.style.display = 'none'; }, timeout);
 }
     </script>
 </body>
