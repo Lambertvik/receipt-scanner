@@ -59,13 +59,12 @@
         .code-item.partial-border { border-left-color: #ff9800; }
         .code-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: bold; color: #333; }
         .receipt-summary { font-size: 16px; color: #333; margin-bottom: 8px; font-weight: 700; }
-        .receipt-info { font-size: 12px; color: #555; margin-bottom: 4px; }
-        .receipt-link { 
-            display: inline-block; margin-top: 8px; padding: 8px 12px; 
-            background: #2196F3; color: white; text-decoration: none; 
-            border-radius: 6px; font-size: 12px; font-weight: bold;
+        .receipt-info { font-size: 12px; color: #555; margin-bottom: 4px; word-break: break-word; }
+        .receipt-qr-string { 
+            font-family: monospace; font-size: 10px; color: #666; 
+            background: #f5f5f5; padding: 8px; border-radius: 4px;
+            word-break: break-all; margin-top: 8px; max-height: 60px; overflow-y: auto;
         }
-        .receipt-link:hover { background: #1976D2; }
         .receipt-items { 
             background: white; padding: 10px; border-radius: 6px; 
             font-size: 13px; color: #333; max-height: 200px; overflow-y: auto; margin-top: 8px;
@@ -123,7 +122,7 @@
         
         <button class="button btn-scan" id="scanBtn" onclick="toggleScan()">📷 Начать сканирование</button>
         <button class="button btn-excel" onclick="exportToExcel()">📊 Экспорт в Excel (CSV)</button>
-        <button class="button btn-1c" onclick="exportTo1C()"> Экспорт для 1С (TXT)</button>
+        <button class="button btn-1c" onclick="exportTo1C()">💼 Экспорт для 1С (TXT)</button>
         <button class="button btn-clear" onclick="clearCodes()">🗑️ Очистить все</button>
         
         <div class="stats">📊 Сохранено чеков: <span id="count">0</span></div>
@@ -138,7 +137,7 @@
         <button class="btn-clear-log" onclick="clearLog()">🗑️ Очистить лог</button>
     </div>
     
-    <div class="footer">v10.0 | Полные реквизиты + ссылка на чек</div>
+    <div class="footer">v11.0 | С адресом + полная QR-строка</div>
 
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script>
@@ -150,6 +149,7 @@
         let scanning = false;
         let scanTimeout = null;
         let stream = null;
+        let lastScannedQR = '';
 
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js').catch(err => console.log('SW error:', err));
@@ -163,7 +163,7 @@
 
         function checkCameraPermission() {
             navigator.permissions.query({ name: 'camera' }).then(result => {
-                if (result.state === 'denied') addLog('⚠️ Доступ к камере запрещен', 'error');
+                if (result.state === 'denied') addLog('️ Доступ к камере запрещен', 'error');
             });
         }
 
@@ -214,7 +214,7 @@
             let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
             
             if (receipts.some(r => r.qr === qrData)) {
-                addLog('⚠️ Чек уже сохранен!', 'error');
+                addLog('️ Чек уже сохранен!', 'error');
                 return;
             }
 
@@ -223,7 +223,8 @@
                 return;
             }
 
-            addLog('🔄 Запрос к API...', 'info');
+            addLog(' Запрос к API...', 'info');
+            lastScannedQR = qrData;
             
             try {
                 const formData = new URLSearchParams();
@@ -244,18 +245,15 @@
                 if (data.code === 1) {
                     const json = data.data.json;
                     
-                    // Извлекаем параметры QR для ссылки
-                    const qrParams = parseQRParams(qrData);
-                    const checkLink = 'https://proverkacheka.com/#check?fn=' + qrParams.fn + '&fd=' + qrParams.fd + '&fp=' + qrParams.fp + '&t=' + qrParams.t + '&n=' + qrParams.n + '&s=' + qrParams.s;
-                    
                     let receiptObj = {
                         qr: qrData,
                         date: json.ticketDate || parseQRDate(qrData),
                         total: json.totalSum ? (parseFloat(json.totalSum) / 100).toFixed(2) : parseQRSum(qrData),
                         shop: json.user || '',
                         inn: json.userInn || '',
-                        address: json.retailPlaceAddres || '',
-                        checkLink: checkLink,
+                        address: json.retailPlaceAddres || '',  // ВОТ АДРЕС!
+                        checkNumber: json.requestNumber || '',
+                        cashier: json.operator || '',
                         items: (json.items || []).map(item => ({
                             name: item.name || 'Товар',
                             quantity: item.quantity || 1,
@@ -278,7 +276,7 @@
                     addLog('⚠️ Превышено количество запросов', 'error');
                     saveBasicReceipt(qrData, receipts);
                 } else if (data.code === 0) {
-                    addLog('❌ Чек некорректен', 'error');
+                    addLog(' Чек некорректен', 'error');
                     saveBasicReceipt(qrData, receipts);
                 } else {
                     addLog('❌ Ошибка API (code=' + data.code + ')', 'error');
@@ -300,9 +298,6 @@
         }
 
         function saveBasicReceipt(qrData, receipts) {
-            const qrParams = parseQRParams(qrData);
-            const checkLink = 'https://proverkacheka.com/#check?fn=' + qrParams.fn + '&fd=' + qrParams.fd + '&fp=' + qrParams.fp + '&t=' + qrParams.t + '&n=' + qrParams.n + '&s=' + qrParams.s;
-            
             receipts.push({
                 qr: qrData,
                 date: parseQRDate(qrData),
@@ -310,7 +305,8 @@
                 shop: '',
                 inn: '',
                 address: '',
-                checkLink: checkLink,
+                checkNumber: '',
+                cashier: '',
                 items: [],
                 timestamp: Date.now(),
                 status: 'partial',
@@ -318,18 +314,6 @@
             });
             localStorage.setItem('receipts', JSON.stringify(receipts));
             loadSavedCodes();
-        }
-
-        function parseQRParams(qrData) {
-            const params = new URLSearchParams(qrData);
-            return {
-                t: params.get('t') || '',
-                s: params.get('s') || '',
-                fn: params.get('fn') || '',
-                fd: params.get('i') || '',
-                fp: params.get('fp') || '',
-                n: params.get('n') || '1'
-            };
         }
 
         function addLog(message, type) {
@@ -405,9 +389,15 @@
                 if (receipt.address) {
                     html += '<div class="receipt-info">📍 ' + receipt.address + '</div>';
                 }
-                if (receipt.checkLink) {
-                    html += '<a href="' + receipt.checkLink + '" target="_blank" class="receipt-link">🔗 Проверить чек онлайн</a>';
+                if (receipt.checkNumber) {
+                    html += '<div class="receipt-info">🧾 Чек № ' + receipt.checkNumber + '</div>';
                 }
+                if (receipt.cashier) {
+                    html += '<div class="receipt-info">👤 Кассир: ' + receipt.cashier + '</div>';
+                }
+                
+                // Показываем полную QR-строку
+                html += '<div class="receipt-qr-string">' + receipt.qr + '</div>';
                 
                 if (receipt.items && receipt.items.length > 0) {
                     html += '<div class="receipt-items">';
@@ -416,7 +406,7 @@
                     });
                     html += '</div>';
                 } else if (receipt.status === 'partial') {
-                    html += '<div style="font-size:12px;color:#ff9800;margin-top:5px">️ Без состава</div>';
+                    html += '<div style="font-size:12px;color:#ff9800;margin-top:5px">⚠️ Без состава</div>';
                 }
                 
                 div.innerHTML = html;
@@ -426,9 +416,9 @@
 
         function exportToExcel() {
             let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
-            if (receipts.length === 0) { addLog(' Нет чеков для экспорта', 'error'); return; }
+            if (receipts.length === 0) { addLog('❌ Нет чеков для экспорта', 'error'); return; }
             
-            let csvContent = '\uFEFFДата;Сумма;Организация;ИНН;Адрес;Товар;Количество;Цена;Ссылка;QR-код\n';
+            let csvContent = '\uFEFFДата;Сумма;Организация;ИНН;Адрес;Чек№;Кассир;Товар;Количество;Цена;QR-строка\n';
             
             receipts.forEach(receipt => {
                 const date = receipt.date || '';
@@ -436,7 +426,8 @@
                 const shop = (receipt.shop || '').replace(/;/g, ',');
                 const inn = (receipt.inn || '').replace(/;/g, ',');
                 const address = (receipt.address || '').replace(/;/g, ',');
-                const link = receipt.checkLink || '';
+                const checkNum = (receipt.checkNumber || '').replace(/;/g, ',');
+                const cashier = (receipt.cashier || '').replace(/;/g, ',');
                 const qr = receipt.qr.replace(/"/g, '""');
                 
                 if (receipt.items && receipt.items.length > 0) {
@@ -450,13 +441,14 @@
                         const csvShop = idx === 0 ? shop : '';
                         const csvInn = idx === 0 ? inn : '';
                         const csvAddress = idx === 0 ? address : '';
-                        const csvLink = idx === 0 ? link : '';
+                        const csvCheckNum = idx === 0 ? checkNum : '';
+                        const csvCashier = idx === 0 ? cashier : '';
                         const csvQR = idx === 0 ? qr : '';
                         
-                        csvContent += csvDate + ';' + csvTotal + ';' + csvShop + ';' + csvInn + ';' + csvAddress + ';"' + name + '";' + qty + ';' + sum + ';' + csvLink + ';' + csvQR + '\n';
+                        csvContent += csvDate + ';' + csvTotal + ';' + csvShop + ';' + csvInn + ';' + csvAddress + ';' + csvCheckNum + ';' + csvCashier + ';"' + name + '";' + qty + ';' + sum + ';' + csvQR + '\n';
                     });
                 } else {
-                    csvContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';"Без детализации";1;' + total + ';' + link + ';' + qr + '\n';
+                    csvContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + cashier + ';"Без детализации";1;' + total + ';' + qr + '\n';
                 }
             });
             
@@ -475,9 +467,9 @@
 
         function exportTo1C() {
             let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
-            if (receipts.length === 0) { addLog('❌ Нет чеков для экспорта', 'error'); return; }
+            if (receipts.length === 0) { addLog(' Нет чеков для экспорта', 'error'); return; }
             
-            let txtContent = '#1C:UNF\n#Version:1.0\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,Item,Quantity,Price,Link,QRCode\n\n';
+            let txtContent = '#1C:UNF\n#Version:1.0\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,CheckNum,Cashier,Item,Quantity,Price,QRString\n\n';
             
             receipts.forEach(receipt => {
                 const date = receipt.date || '';
@@ -485,7 +477,8 @@
                 const shop = (receipt.shop || '').replace(/;/g, ',');
                 const inn = (receipt.inn || '').replace(/;/g, ',');
                 const address = (receipt.address || '').replace(/;/g, ',');
-                const link = receipt.checkLink || '';
+                const checkNum = (receipt.checkNumber || '').replace(/;/g, ',');
+                const cashier = (receipt.cashier || '').replace(/;/g, ',');
                 const qr = receipt.qr.replace(/;/g, ',').replace(/"/g, '""');
                 
                 if (receipt.items && receipt.items.length > 0) {
@@ -499,13 +492,14 @@
                         const csvShop = idx === 0 ? shop : '';
                         const csvInn = idx === 0 ? inn : '';
                         const csvAddress = idx === 0 ? address : '';
-                        const csvLink = idx === 0 ? link : '';
+                        const csvCheckNum = idx === 0 ? checkNum : '';
+                        const csvCashier = idx === 0 ? cashier : '';
                         const csvQR = idx === 0 ? qr : '';
                         
-                        txtContent += csvDate + ';' + csvTotal + ';' + csvShop + ';' + csvInn + ';' + csvAddress + ';"' + name + '";' + qty + ';' + price + ';' + csvLink + ';' + csvQR + '\n';
+                        txtContent += csvDate + ';' + csvTotal + ';' + csvShop + ';' + csvInn + ';' + csvAddress + ';' + csvCheckNum + ';' + csvCashier + ';"' + name + '";' + qty + ';' + price + ';' + csvQR + '\n';
                     });
                 } else {
-                    txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';"Без детализации";1;' + total + ';' + link + ';' + qr + '\n';
+                    txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + cashier + ';"Без детализации";1;' + total + ';' + qr + '\n';
                 }
             });
             
