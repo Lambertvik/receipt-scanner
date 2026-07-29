@@ -501,65 +501,49 @@
             });
         }
 
-        function exportToExcel() {
+    function exportToExcel() {
     let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
     
-    // Диагностика 1: есть ли чеки
     if (receipts.length === 0) { 
-        alert('❌ Нет сохраненных чеков! Сначала отсканируйте хотя бы один чек.');
+        alert('❌ Нет сохраненных чеков!');
         return; 
     }
     
-    alert('✅ Найдено чеков: ' + receipts.length + '\nНачинаю формирование файла...');
+    alert('✅ Найдено чеков: ' + receipts.length);
     
     try {
-        // Формируем CSV
-        let csvContent = '\uFEFFДата;Сумма;Организация;ИНН;Адрес;Чек№;Кассир;QR-строка\n';
+        let csvContent = '\uFEFFДата;Сумма;Организация;ИНН;Адрес;Чек№;Смена;Кассир;QR-строка\n';
         
-        receipts.forEach(receipt => {
-            const date = receipt.date || '';
-            const total = receipt.total || '0.00';
-            const shop = (receipt.shop || '').replace(/;/g, ',');
-            const inn = (receipt.inn || '').replace(/;/g, ',');
-            const address = (receipt.address || '').replace(/;/g, ',');
-            const checkNum = (receipt.checkNumber || '').replace(/;/g, ',');
-            const cashier = (receipt.cashier || '').replace(/;/g, ',');
-            const qr = receipt.qr.replace(/"/g, '""');
+        receipts.forEach(function(receipt) {
+            const date = String(receipt.date || '');
+            const total = String(receipt.total || '0.00');
+            const shop = String(receipt.shop || '').replace(/;/g, ',');
+            const inn = String(receipt.inn || '').replace(/;/g, ',');
+            const address = String(receipt.address || '').replace(/;/g, ',');
+            const checkNum = String(receipt.checkNumber || '').replace(/;/g, ',');
+            const shiftNum = String(receipt.shiftNumber || '').replace(/;/g, ',');
+            const cashier = String(receipt.cashier || '').replace(/;/g, ',');
+            const qr = String(receipt.qr || '').replace(/"/g, '""');
             
-            csvContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + cashier + ';"' + qr + '"\n';
+            csvContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';"' + qr + '"\n';
         });
         
-        alert('✅ Файл сформирован, размер: ' + csvContent.length + ' символов');
-        
-        // Альтернативный способ скачивания для мобильных
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const dateStr = new Date().toISOString().slice(0,10);
         const filename = 'Чеки_ФНС_' + dateStr + '.csv';
         
-        // Способ 1: через ссылку
         const link = document.createElement('a');
         link.href = url;
         link.download = filename;
-        link.style.display = 'none';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         
-        // Способ 2: через window.open (запасной)
-        setTimeout(() => {
-            window.open(url, '_blank');
-        }, 500);
-        
-        alert('✅ Файл должен начать скачиваться!\n\nЕсли не скачался - попробуйте другой браузер.');
-        
-        // Освобождаем память
-        setTimeout(() => {
-            URL.revokeObjectURL(url);
-        }, 10000);
+        alert('✅ Файл ' + filename + ' скачан!');
         
     } catch (error) {
-        alert('❌ Ошибка при экспорте: ' + error.message);
+        alert('❌ Ошибка экспорта: ' + error.message);
     }
 }
 
@@ -574,23 +558,24 @@ function exportTo1C() {
     alert('✅ Найдено чеков: ' + receipts.length + '\nФормирую файл для 1С...');
     
     try {
-        let txtContent = '#1C:UNF\n#Version:1.0\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,CheckNum,Cashier,Item,Quantity,Price,QRString\n\n';
+        let txtContent = '#1C:UNF\n#Version:1.0\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Item,Quantity,Price,QRString\n\n';
         
-        receipts.forEach(receipt => {
-            const date = receipt.date || '';
-            const total = receipt.total || '0.00';
-            const shop = (receipt.shop || '').replace(/;/g, ',');
-            const inn = (receipt.inn || '').replace(/;/g, ',');
-            const address = (receipt.address || '').replace(/;/g, ',');
-            const checkNum = (receipt.checkNumber || '').replace(/;/g, ',');
-            const cashier = (receipt.cashier || '').replace(/;/g, ',');
-            const qr = receipt.qr.replace(/;/g, ',').replace(/"/g, '""');
+        receipts.forEach(function(receipt) {
+            const date = String(receipt.date || '');
+            const total = String(receipt.total || '0.00');
+            const shop = String(receipt.shop || '').replace(/;/g, ',');
+            const inn = String(receipt.inn || '').replace(/;/g, ',');
+            const address = String(receipt.address || '').replace(/;/g, ',');
+            const checkNum = String(receipt.checkNumber || '').replace(/;/g, ',');
+            const shiftNum = String(receipt.shiftNumber || '').replace(/;/g, ',');
+            const cashier = String(receipt.cashier || '').replace(/;/g, ',');
+            const qr = String(receipt.qr || '').replace(/;/g, ',').replace(/"/g, '""');
             
             if (receipt.items && receipt.items.length > 0) {
-                receipt.items.forEach((item, idx) => {
-                    const name = item.name.replace(/;/g, ',');
-                    const qty = item.quantity || 1;
-                    const price = item.price || '0.00';
+                receipt.items.forEach(function(item, idx) {
+                    const name = String(item.name || 'Товар').replace(/;/g, ',');
+                    const qty = String(item.quantity || 1);
+                    const price = String(item.price || '0.00');
                     
                     const csvDate = idx === 0 ? date : '';
                     const csvTotal = idx === 0 ? total : '';
@@ -598,17 +583,16 @@ function exportTo1C() {
                     const csvInn = idx === 0 ? inn : '';
                     const csvAddress = idx === 0 ? address : '';
                     const csvCheckNum = idx === 0 ? checkNum : '';
+                    const csvShiftNum = idx === 0 ? shiftNum : '';
                     const csvCashier = idx === 0 ? cashier : '';
                     const csvQR = idx === 0 ? qr : '';
                     
-                    txtContent += csvDate + ';' + csvTotal + ';' + csvShop + ';' + csvInn + ';' + csvAddress + ';' + csvCheckNum + ';' + csvCashier + ';"' + name + '";' + qty + ';' + price + ';' + csvQR + '\n';
+                    txtContent += csvDate + ';' + csvTotal + ';' + csvShop + ';' + csvInn + ';' + csvAddress + ';' + csvCheckNum + ';' + csvShiftNum + ';' + csvCashier + ';"' + name + '";' + qty + ';' + price + ';' + csvQR + '\n';
                 });
             } else {
-                txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + cashier + ';"Без детализации";1;' + total + ';' + qr + '\n';
+                txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';"Без детализации";1;' + total + ';' + qr + '\n';
             }
         });
-        
-        alert('✅ Файл сформирован, размер: ' + txtContent.length + ' символов');
         
         const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
@@ -618,23 +602,14 @@ function exportTo1C() {
         const link = document.createElement('a');
         link.href = url;
         link.download = filename;
-        link.style.display = 'none';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         
-        setTimeout(() => {
-            window.open(url, '_blank');
-        }, 500);
-        
-        alert('✅ Файл должен начать скачиваться!');
-        
-        setTimeout(() => {
-            URL.revokeObjectURL(url);
-        }, 10000);
+        alert('✅ Файл ' + filename + ' скачан!');
         
     } catch (error) {
-        alert('❌ Ошибка: ' + error.message);
+        alert('❌ Ошибка экспорта: ' + error.message);
     }
 }
         function clearCodes() {
