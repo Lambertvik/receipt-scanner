@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#4CAF50">
-    <meta name="description" content="Сканер QR-кодов с чеков для 1С">
+    <meta name="description" content="Сканер QR-кодов с чеков для 1С с расшифровкой API">
     <title>Сканер чеков ФНС</title>
     <link rel="manifest" href="manifest.json">
     <style>
@@ -20,6 +20,22 @@
             box-shadow: 0 10px 40px rgba(0,0,0,0.3); max-width: 600px; margin: 0 auto;
         }
         h1 { color: #333; text-align: center; margin-bottom: 15px; font-size: 24px; }
+        .api-section {
+            background: #f0f0f0; padding: 15px; border-radius: 12px; margin-bottom: 15px;
+        }
+        .api-section label {
+            display: block; font-weight: bold; margin-bottom: 8px; color: #333;
+        }
+        .api-input {
+            width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px;
+            font-size: 14px; font-family: monospace;
+        }
+        .api-input:focus { outline: none; border-color: #4CAF50; }
+        .api-status {
+            font-size: 12px; margin-top: 8px; padding: 8px; border-radius: 6px;
+        }
+        .api-status.ok { background: #d4edda; color: #155724; }
+        .api-status.error { background: #f8d7da; color: #721c24; }
         .video-container {
             position: relative; width: 100%; border-radius: 12px; overflow: hidden;
             background: #000; margin-bottom: 15px;
@@ -65,15 +81,36 @@
             border-left: 5px solid #4CAF50; border-radius: 8px; transition: all 0.3s;
         }
         .code-item.error-border { border-left-color: #f44336; }
+        .code-item.partial-border { border-left-color: #ff9800; }
         .code-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: bold; color: #333; }
         .receipt-summary { font-size: 16px; color: #333; margin-bottom: 8px; font-weight: 700; }
+        .receipt-items { 
+            background: white; padding: 10px; border-radius: 6px; 
+            font-size: 13px; color: #333; max-height: 200px; overflow-y: auto; margin-top: 8px;
+        }
+        .item-row { 
+            display: flex; justify-content: space-between; padding: 5px 0; 
+            border-bottom: 1px solid #eee; align-items: center;
+        }
+        .item-row:last-child { border-bottom: none; }
+        .item-name { flex: 1; font-size: 12px; }
+        .item-qty { color: #666; margin: 0 8px; white-space: nowrap; font-size: 12px; }
+        .item-price { font-weight: 600; color: #4CAF50; white-space: nowrap; font-size: 12px; }
+        .receipt-details { font-size: 11px; color: #999; word-break: break-all; margin-top: 8px; }
         .empty-state { text-align: center; padding: 40px; color: #999; font-style: italic; }
         .footer { text-align: center; margin-top: 20px; color: rgba(255,255,255,0.8); font-size: 12px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🛒 Сканер чеков ФНС</h1>
+        <h1> Сканер чеков ФНС</h1>
+        
+        <!-- Секция API ключа -->
+        <div class="api-section">
+            <label for="apiToken">🔑 Токен API proverkacheka.com:</label>
+            <input type="text" id="apiToken" class="api-input" placeholder="53441.PmJ2NluFAgH99EwRY">
+            <div id="apiStatus" class="api-status" style="display: none;"></div>
+        </div>
         
         <div class="video-container">
             <video id="video" playsinline></video>
@@ -81,9 +118,9 @@
         </div>
         
         <button class="button btn-scan" id="scanBtn" onclick="toggleScan()">📷 Начать сканирование</button>
-        <button class="button btn-excel" onclick="exportToExcel()">📊 Экспорт в Excel (CSV)</button>
+        <button class="button btn-excel" onclick="exportToExcel()"> Экспорт в Excel (CSV)</button>
         <button class="button btn-1c" onclick="exportTo1C()">💼 Экспорт для 1С (TXT)</button>
-        <button class="button btn-clear" onclick="clearCodes()">🗑️ Очистить все</button>
+        <button class="button btn-clear" onclick="clearCodes()">️ Очистить все</button>
         
         <div id="status"></div>
         <div class="stats">📊 Сохранено чеков: <span id="count">0</span></div>
@@ -93,7 +130,7 @@
         </div>
     </div>
     
-    <div class="footer">v4.0 | Два формата: Excel и 1С</div>
+    <div class="footer">v5.0 | API proverkacheka.com | Расшифровка состава чека</div>
 
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script>
@@ -108,11 +145,43 @@
             navigator.serviceWorker.register('sw.js').catch(err => console.log('SW error:', err));
         }
 
-        window.onload = function() { loadSavedCodes(); checkCameraPermission(); };
+        window.onload = function() { 
+            loadSavedCodes(); 
+            checkCameraPermission();
+            loadApiToken();
+        };
+
+        function loadApiToken() {
+            const savedToken = localStorage.getItem('proverka_api_token');
+            if (savedToken) {
+                document.getElementById('apiToken').value = savedToken;
+                showApiStatus('✅ Токен загружен из памяти', 'ok');
+            }
+        }
+
+        function saveApiToken() {
+            const token = document.getElementById('apiToken').value.trim();
+            localStorage.setItem('proverka_api_token', token);
+            if (token) {
+                showApiStatus('✅ Токен сохранен', 'ok');
+            } else {
+                showApiStatus('⚠️ Токен не указан', 'error');
+            }
+        }
+
+        function showApiStatus(message, type) {
+            const status = document.getElementById('apiStatus');
+            status.textContent = message;
+            status.className = 'api-status ' + type;
+            status.style.display = 'block';
+        }
+
+        // Сохраняем токен при изменении
+        document.getElementById('apiToken').addEventListener('change', saveApiToken);
 
         function checkCameraPermission() {
             navigator.permissions.query({ name: 'camera' }).then(result => {
-                if (result.state === 'denied') showStatus('️ Доступ к камере запрещен.', 'error');
+                if (result.state === 'denied') showStatus('⚠️ Доступ к камере запрещен.', 'error');
             });
         }
 
@@ -168,20 +237,72 @@
                 return;
             }
 
-            showStatus('⏳ Сохранение...', 'info');
+            const apiToken = document.getElementById('apiToken').value.trim();
             
-            const basicInfo = parseQRCode(qrData);
-            receipts.push({
+            if (!apiToken) {
+                showStatus('️ Введите API токен!', 'error');
+                return;
+            }
+
+            showStatus(' Расшифровка через API...', 'info');
+            
+            let receiptObj = {
                 qr: qrData,
-                date: basicInfo.date,
-                total: basicInfo.sum,
+                date: parseQRDate(qrData),
+                total: parseQRSum(qrData),
+                items: [],
                 timestamp: Date.now(),
-                status: 'ok'
-            });
-            localStorage.setItem('receipts', JSON.stringify(receipts));
+                status: 'partial'
+            };
+
+            try {
+                // Запрос к API proverkacheka.com
+                const response = await fetch('https://api.proverkacheka.com/api/v1/check/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        token: apiToken,
+                        qr: qrData
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                // Проверяем успешность
+                if (data.success || data.status === 'ok') {
+                    const receiptData = data.data || data;
+                    
+                    receiptObj = {
+                        qr: qrData,
+                        date: receiptData.date || parseQRDate(qrData),
+                        total: receiptData.total || parseQRSum(qrData),
+                        shop: receiptData.shop || receiptData.retailPlace || '',
+                        items: receiptData.items || [],
+                        timestamp: Date.now(),
+                        status: 'ok'
+                    };
+                    
+                    if (navigator.vibrate) navigator.vibrate(200);
+                    showStatus('✅ Чек расшифрован с составом!', 'success');
+                } else {
+                    throw new Error(data.message || 'API вернул ошибку');
+                }
+                
+            } catch (error) {
+                console.error('API Error:', error);
+                showStatus('️ API ошибка: ' + error.message + '. Сохраняю базовые данные.', 'error');
+                receiptObj.apiError = error.message;
+            }
             
-            if (navigator.vibrate) navigator.vibrate(200);
-            showStatus('✅ Чек сохранен!', 'success');
+            receipts.push(receiptObj);
+            localStorage.setItem('receipts', JSON.stringify(receipts));
             loadSavedCodes();
             
             scanning = false;
@@ -191,13 +312,6 @@
                     requestAnimationFrame(tick);
                 }
             }, 1500);
-        }
-
-        function parseQRCode(qrData) {
-            return {
-                date: parseQRDate(qrData),
-                sum: parseQRSum(qrData)
-            };
         }
 
         function parseQRDate(qrData) {
@@ -238,14 +352,44 @@
                 const realIndex = receipts.length - index;
                 const div = document.createElement('div');
                 div.className = 'code-item';
-                div.innerHTML = `
+                if (receipt.status === 'partial') div.classList.add('partial-border');
+                if (receipt.status === 'error') div.classList.add('error-border');
+                
+                let html = `
                     <div class="code-header">
                         <span>Чек #${realIndex}</span>
                         <span>${receipt.date}</span>
                     </div>
                     <div class="receipt-summary">💰 ${receipt.total} ₽</div>
-                    <div style="font-size:11px;color:#999;margin-top:5px;word-break:break-all">${receipt.qr.substring(0, 60)}...</div>
                 `;
+                
+                if (receipt.shop) {
+                    html += `<div style="font-size:12px;color:#666;margin-bottom:5px">🏪 ${receipt.shop}</div>`;
+                }
+                
+                if (receipt.items && receipt.items.length > 0) {
+                    html += '<div class="receipt-items">';
+                    receipt.items.forEach(item => {
+                        const name = item.name || item.text || 'Товар';
+                        const qty = item.quantity || 1;
+                        const price = item.price || 0;
+                        const sum = item.sum || (price * qty);
+                        
+                        html += `
+                            <div class="item-row">
+                                <span class="item-name">${name}</span>
+                                <span class="item-qty">${qty} шт.</span>
+                                <span class="item-price">${sum.toFixed(2)} ₽</span>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                } else if (receipt.status === 'partial') {
+                    html += `<div style="font-size:12px;color:#ff9800;margin-top:5px">⚠️ Без состава (API: ${receipt.apiError || 'ошибка'})</div>`;
+                }
+                
+                html += `<div class="receipt-details">QR: ${receipt.qr.substring(0, 50)}...</div>`;
+                div.innerHTML = html;
                 list.appendChild(div);
             });
             
@@ -258,21 +402,35 @@
             }
         }
 
-        // ЭКСПОРТ В EXCEL (CSV с разделителями точка с запятой)
         function exportToExcel() {
             let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
             if (receipts.length === 0) { showStatus('❌ Нет чеков для экспорта', 'error'); return; }
             
-            // \uFEFF - BOM для корректного отображения кириллицы в Excel
-            let csvContent = "\uFEFFДата;Сумма;Комментарий;QR-код\n";
+            let csvContent = "\uFEFFДата;Сумма;Магазин;Товар;Количество;Цена;QR-код\n";
             
             receipts.forEach(receipt => {
                 const date = receipt.date || '';
                 const total = receipt.total || '0.00';
-                const comment = `Чек ФНС от ${date}`;
+                const shop = (receipt.shop || '').replace(/;/g, ',');
                 const qr = receipt.qr.replace(/"/g, '""');
                 
-                csvContent += `${date};${total};"${comment}";"${qr}"\n`;
+                if (receipt.items && receipt.items.length > 0) {
+                    receipt.items.forEach((item, idx) => {
+                        const name = (item.name || item.text || 'Товар').replace(/;/g, ',').replace(/"/g, '""');
+                        const qty = item.quantity || 1;
+                        const price = (item.price || 0).toFixed(2);
+                        const sum = (item.sum || (item.price * item.quantity) || 0).toFixed(2);
+                        
+                        const csvDate = idx === 0 ? date : '';
+                        const csvTotal = idx === 0 ? total : '';
+                        const csvShop = idx === 0 ? shop : '';
+                        const csvQR = idx === 0 ? qr : '';
+                        
+                        csvContent += `${csvDate};${csvTotal};${csvShop};"${name}";${qty};${sum};${csvQR}\n`;
+                    });
+                } else {
+                    csvContent += `${date};${total};${shop};"Без детализации";1;${total};${qr}\n`;
+                }
             });
             
             const dateStr = new Date().toISOString().slice(0,10);
@@ -285,30 +443,42 @@
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
-            showStatus(`📊 Файл ${filename} скачан! Откройте в Excel.`, 'success');
+            showStatus(` Файл ${filename} скачан!`, 'success');
         }
 
-        // ЭКСПОРТ ДЛЯ 1С (специальный формат с заголовком)
         function exportTo1C() {
             let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
-            if (receipts.length === 0) { showStatus('❌ Нет чеков для экспорта', 'error'); return; }
+            if (receipts.length === 0) { showStatus(' Нет чеков для экспорта', 'error'); return; }
             
-            // Формируем файл в формате, понятном 1С
-            // Заголовок с обязательной пометкой
             let txtContent = "#1C:UNF\n";
             txtContent += "#Version:1.0\n";
             txtContent += "#Encoding:UTF-8\n";
             txtContent += "#Separator:;\n";
-            txtContent += "#Fields:Date,Amount,Comment,QRCode\n";
+            txtContent += "#Fields:Date,Amount,Shop,Item,Quantity,Price,QRCode\n";
             txtContent += "\n";
             
             receipts.forEach(receipt => {
                 const date = receipt.date || '';
                 const total = receipt.total || '0.00';
-                const comment = `Чек ФНС от ${date}`.replace(/;/g, ',');
+                const shop = (receipt.shop || '').replace(/;/g, ',');
                 const qr = receipt.qr.replace(/;/g, ',').replace(/"/g, '""');
                 
-                txtContent += `${date};${total};"${comment}";"${qr}"\n`;
+                if (receipt.items && receipt.items.length > 0) {
+                    receipt.items.forEach((item, idx) => {
+                        const name = (item.name || item.text || 'Товар').replace(/;/g, ',').replace(/"/g, '""');
+                        const qty = item.quantity || 1;
+                        const price = (item.price || 0).toFixed(2);
+                        
+                        const csvDate = idx === 0 ? date : '';
+                        const csvTotal = idx === 0 ? total : '';
+                        const csvShop = idx === 0 ? shop : '';
+                        const csvQR = idx === 0 ? qr : '';
+                        
+                        txtContent += `${csvDate};${csvTotal};${csvShop};"${name}";${qty};${price};${csvQR}\n`;
+                    });
+                } else {
+                    txtContent += `${date};${total};${shop};"Без детализации";1;${total};${qr}\n`;
+                }
             });
             
             const dateStr = new Date().toISOString().slice(0,10);
@@ -321,7 +491,7 @@
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
-            showStatus(`💼 Файл ${filename} скачан! Загружайте в 1С через "Загрузка данных".`, 'success');
+            showStatus(`💼 Файл ${filename} скачан!`, 'success');
         }
 
         function clearCodes() {
