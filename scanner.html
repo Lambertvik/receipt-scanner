@@ -58,20 +58,20 @@
         }
         .code-item.partial-border { border-left-color: #ff9800; }
         .code-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: bold; color: #333; }
-        .receipt-summary { font-size: 16px; color: #333; margin-bottom: 8px; font-weight: 700; }
-        .receipt-info { font-size: 12px; color: #555; margin-bottom: 4px; word-break: break-word; }
+        .receipt-summary { font-size: 18px; color: #333; margin-bottom: 8px; font-weight: 700; }
+        .receipt-info { font-size: 13px; color: #555; margin-bottom: 4px; word-break: break-word; }
         .receipt-qr-string { 
-            font-family: monospace; font-size: 10px; color: #666; 
+            font-family: monospace; font-size: 11px; color: #666; 
             background: #f5f5f5; padding: 8px; border-radius: 4px;
-            word-break: break-all; margin-top: 8px; max-height: 60px; overflow-y: auto;
+            word-break: break-all; margin-top: 8px; max-height: 80px; overflow-y: auto;
         }
         .receipt-items { 
             background: white; padding: 10px; border-radius: 6px; 
-            font-size: 13px; color: #333; max-height: 200px; overflow-y: auto; margin-top: 8px;
+            font-size: 13px; color: #333; max-height: 250px; overflow-y: auto; margin-top: 8px;
         }
         .item-row { 
-            display: flex; justify-content: space-between; padding: 5px 0; 
-            border-bottom: 1px solid #eee; align-items: center;
+            display: flex; justify-content: space-between; padding: 6px 0; 
+            border-bottom: 1px solid #eee; align-items: flex-start;
         }
         .item-row:last-child { border-bottom: none; }
         .item-name { flex: 1; font-size: 12px; }
@@ -83,7 +83,7 @@
             background: #1e1e1e;
             border-radius: 12px;
             padding: 15px;
-            max-height: 400px;
+            max-height: 300px;
             overflow-y: auto;
             font-family: 'Courier New', monospace;
             font-size: 11px;
@@ -109,11 +109,24 @@
             width: 100%;
         }
         .footer { text-align: center; margin-top: 20px; color: rgba(255,255,255,0.8); font-size: 12px; }
+        .cache-info {
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 12px;
+            color: #1565c0;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🛒 Сканер чеков ФНС</h1>
+        
+        <div class="cache-info" id="cacheInfo">
+             Кэш: 0 чеков | API: 0/15 запросов сегодня
+        </div>
         
         <div class="video-container">
             <video id="video" playsinline></video>
@@ -134,14 +147,20 @@
         <div class="log-container" id="logContainer">
             <div style="color: #999; text-align: center;">Лог пуст</div>
         </div>
-        <button class="btn-clear-log" onclick="clearLog()">🗑️ Очистить лог</button>
+        <button class="btn-clear-log" onclick="clearLog()">️ Очистить лог</button>
     </div>
     
-    <div class="footer">v11.0 | С адресом + полная QR-строка</div>
+    <div class="footer">v12.0 | Долгосрочный кэш | Полные реквизиты</div>
 
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script>
+        // ================= НАСТРОЙКИ =================
         const API_TOKEN = "53441.PmJ2NluFAgH99EwRY"; 
+        
+        // Защита от лишних запросов
+        let isProcessing = false;
+        let lastScanTime = 0;
+        const SCAN_COOLDOWN = 3000; // 3 секунды между сканированиями
         
         let video = document.getElementById('video');
         let canvas = document.createElement('canvas');
@@ -149,7 +168,6 @@
         let scanning = false;
         let scanTimeout = null;
         let stream = null;
-        let lastScannedQR = '';
 
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js').catch(err => console.log('SW error:', err));
@@ -158,13 +176,28 @@
         window.onload = function() { 
             loadSavedCodes(); 
             checkCameraPermission();
-            addLog('✅ Токен загружен', 'success');
+            updateCacheInfo();
+            addLog('✅ Сканер готов к работе', 'success');
         };
 
         function checkCameraPermission() {
             navigator.permissions.query({ name: 'camera' }).then(result => {
-                if (result.state === 'denied') addLog('️ Доступ к камере запрещен', 'error');
+                if (result.state === 'denied') addLog('⚠️ Доступ к камере запрещен', 'error');
             });
+        }
+
+        function updateCacheInfo() {
+            const receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
+            const cache = JSON.parse(localStorage.getItem('receipts_cache') || '{}');
+            const cacheCount = Object.keys(cache).length;
+            
+            // Считаем запросы за сегодня
+            const today = new Date().toDateString();
+            const dailyStats = JSON.parse(localStorage.getItem('daily_stats') || '{}');
+            const todayRequests = dailyStats[today] || 0;
+            
+            document.getElementById('cacheInfo').textContent = 
+                `💾 Кэш: ${cacheCount} чеков | API: ${todayRequests}/15 запросов сегодня | Всего: ${receipts.length}`;
         }
 
         function toggleScan() { scanning ? stopScan() : startScan(); }
@@ -211,10 +244,33 @@
         }
 
         async function handleScan(qrData) {
-            let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
+            // ЗАЩИТА 1: Блокировка параллельных запросов
+            if (isProcessing) {
+                return;
+            }
             
+            // ЗАЩИТА 2: Задержка между сканированиями
+            const now = Date.now();
+            if (now - lastScanTime < SCAN_COOLDOWN) {
+                return;
+            }
+            lastScanTime = now;
+            
+            // ЗАЩИТА 3: Проверка дубликата в основном хранилище
+            let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
             if (receipts.some(r => r.qr === qrData)) {
-                addLog('️ Чек уже сохранен!', 'error');
+                addLog('⚠️ Чек уже сохранён (дубликат)', 'error');
+                return;
+            }
+            
+            // ЗАЩИТА 4: Проверка долгосрочного кэша
+            let cache = JSON.parse(localStorage.getItem('receipts_cache') || '{}');
+            if (cache[qrData]) {
+                addLog('✅ Чек взят из кэша (API не запрашивался)', 'success');
+                receipts.push(cache[qrData]);
+                localStorage.setItem('receipts', JSON.stringify(receipts));
+                loadSavedCodes();
+                updateCacheInfo();
                 return;
             }
 
@@ -223,8 +279,20 @@
                 return;
             }
 
-            addLog(' Запрос к API...', 'info');
-            lastScannedQR = qrData;
+            // Проверка дневного лимита
+            const today = new Date().toDateString();
+            let dailyStats = JSON.parse(localStorage.getItem('daily_stats') || '{}');
+            if (!dailyStats[today]) dailyStats[today] = 0;
+            
+            if (dailyStats[today] >= 15) {
+                addLog('⚠️ Дневной лимит API исчерпан (15/15). Завтра продолжим.', 'error');
+                saveBasicReceipt(qrData, receipts);
+                return;
+            }
+
+            // Блокируем параллельные запросы
+            isProcessing = true;
+            addLog('🔄 Запрос к API...', 'info');
             
             try {
                 const formData = new URLSearchParams();
@@ -243,7 +311,16 @@
                 const data = JSON.parse(text);
 
                 if (data.code === 1) {
+                    // Увеличиваем счётчик запросов
+                    dailyStats[today] = (dailyStats[today] || 0) + 1;
+                    localStorage.setItem('daily_stats', JSON.stringify(dailyStats));
+                    
                     const json = data.data.json;
+                    
+                    // Поле адреса в API называется retailPlaceAddres (с опечаткой)
+                    const address = json.retailPlaceAddres || 
+                                   json.retailPlaceAddress || 
+                                   json.address || '';
                     
                     let receiptObj = {
                         qr: qrData,
@@ -251,9 +328,11 @@
                         total: json.totalSum ? (parseFloat(json.totalSum) / 100).toFixed(2) : parseQRSum(qrData),
                         shop: json.user || '',
                         inn: json.userInn || '',
-                        address: json.retailPlaceAddres || '',  // ВОТ АДРЕС!
+                        address: address,
                         checkNumber: json.requestNumber || '',
+                        shiftNumber: json.shiftNumber || '',
                         cashier: json.operator || '',
+                        operationType: json.operationType || '1',
                         items: (json.items || []).map(item => ({
                             name: item.name || 'Товар',
                             quantity: item.quantity || 1,
@@ -267,34 +346,39 @@
                     receipts.push(receiptObj);
                     localStorage.setItem('receipts', JSON.stringify(receipts));
                     
+                    // СОХРАНЯЕМ В ДОЛГОСРОЧНЫЙ КЭШ
+                    cache[qrData] = receiptObj;
+                    localStorage.setItem('receipts_cache', JSON.stringify(cache));
+                    
                     addLog('✅ Чек расшифрован! Товаров: ' + receiptObj.items.length, 'success');
                     loadSavedCodes();
+                    updateCacheInfo();
                 } else if (data.code === 2) {
-                    addLog('⏳ Данные чека пока не получены', 'error');
-                    saveBasicReceipt(qrData, receipts);
+                    addLog('⏳ Данные чека пока не получены (повторите через минуту)', 'error');
                 } else if (data.code === 3) {
                     addLog('⚠️ Превышено количество запросов', 'error');
-                    saveBasicReceipt(qrData, receipts);
+                } else if (data.code === 4) {
+                    addLog('⏳ Ожидание перед повторным запросом', 'error');
                 } else if (data.code === 0) {
-                    addLog(' Чек некорректен', 'error');
-                    saveBasicReceipt(qrData, receipts);
+                    addLog('❌ Чек некорректен', 'error');
                 } else {
-                    addLog('❌ Ошибка API (code=' + data.code + ')', 'error');
-                    saveBasicReceipt(qrData, receipts);
+                    addLog(' Ошибка API (code=' + data.code + ')', 'error');
                 }
 
             } catch (error) {
                 addLog('❌ Ошибка: ' + error.message, 'error');
-                saveBasicReceipt(qrData, receipts);
+            } finally {
+                isProcessing = false;
             }
 
+            // Перезапуск камеры с задержкой
             scanning = false;
             scanTimeout = setTimeout(() => {
                 if (document.getElementById('scanBtn').classList.contains('scanning')) {
                     scanning = true;
                     requestAnimationFrame(tick);
                 }
-            }, 1500);
+            }, 2000);
         }
 
         function saveBasicReceipt(qrData, receipts) {
@@ -306,7 +390,9 @@
                 inn: '',
                 address: '',
                 checkNumber: '',
+                shiftNumber: '',
                 cashier: '',
+                operationType: '1',
                 items: [],
                 timestamp: Date.now(),
                 status: 'partial',
@@ -314,6 +400,7 @@
             });
             localStorage.setItem('receipts', JSON.stringify(receipts));
             loadSavedCodes();
+            updateCacheInfo();
         }
 
         function addLog(message, type) {
@@ -393,10 +480,10 @@
                     html += '<div class="receipt-info">🧾 Чек № ' + receipt.checkNumber + '</div>';
                 }
                 if (receipt.cashier) {
-                    html += '<div class="receipt-info">👤 Кассир: ' + receipt.cashier + '</div>';
+                    html += '<div class="receipt-info"> Кассир: ' + receipt.cashier + '</div>';
                 }
                 
-                // Показываем полную QR-строку
+                // Полная QR-строка
                 html += '<div class="receipt-qr-string">' + receipt.qr + '</div>';
                 
                 if (receipt.items && receipt.items.length > 0) {
@@ -418,7 +505,7 @@
             let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
             if (receipts.length === 0) { addLog('❌ Нет чеков для экспорта', 'error'); return; }
             
-            let csvContent = '\uFEFFДата;Сумма;Организация;ИНН;Адрес;Чек№;Кассир;Товар;Количество;Цена;QR-строка\n';
+            let csvContent = '\uFEFFДата;Сумма;Организация;ИНН;Адрес;Чек№;Смена;Кассир;Товар;Количество;Цена;QR-строка\n';
             
             receipts.forEach(receipt => {
                 const date = receipt.date || '';
@@ -427,6 +514,7 @@
                 const inn = (receipt.inn || '').replace(/;/g, ',');
                 const address = (receipt.address || '').replace(/;/g, ',');
                 const checkNum = (receipt.checkNumber || '').replace(/;/g, ',');
+                const shiftNum = (receipt.shiftNumber || '').replace(/;/g, ',');
                 const cashier = (receipt.cashier || '').replace(/;/g, ',');
                 const qr = receipt.qr.replace(/"/g, '""');
                 
@@ -442,13 +530,14 @@
                         const csvInn = idx === 0 ? inn : '';
                         const csvAddress = idx === 0 ? address : '';
                         const csvCheckNum = idx === 0 ? checkNum : '';
+                        const csvShiftNum = idx === 0 ? shiftNum : '';
                         const csvCashier = idx === 0 ? cashier : '';
                         const csvQR = idx === 0 ? qr : '';
                         
-                        csvContent += csvDate + ';' + csvTotal + ';' + csvShop + ';' + csvInn + ';' + csvAddress + ';' + csvCheckNum + ';' + csvCashier + ';"' + name + '";' + qty + ';' + sum + ';' + csvQR + '\n';
+                        csvContent += csvDate + ';' + csvTotal + ';' + csvShop + ';' + csvInn + ';' + csvAddress + ';' + csvCheckNum + ';' + csvShiftNum + ';' + csvCashier + ';"' + name + '";' + qty + ';' + sum + ';' + csvQR + '\n';
                     });
                 } else {
-                    csvContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + cashier + ';"Без детализации";1;' + total + ';' + qr + '\n';
+                    csvContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';"Без детализации";1;' + total + ';' + qr + '\n';
                 }
             });
             
@@ -462,14 +551,14 @@
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
-            addLog('📊 Файл ' + filename + ' скачан!', 'success');
+            addLog('📊 Файл ' + filename + ' скачан! (' + receipts.length + ' чеков)', 'success');
         }
 
         function exportTo1C() {
             let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
-            if (receipts.length === 0) { addLog(' Нет чеков для экспорта', 'error'); return; }
+            if (receipts.length === 0) { addLog('❌ Нет чеков для экспорта', 'error'); return; }
             
-            let txtContent = '#1C:UNF\n#Version:1.0\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,CheckNum,Cashier,Item,Quantity,Price,QRString\n\n';
+            let txtContent = '#1C:UNF\n#Version:1.0\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Item,Quantity,Price,QRString\n\n';
             
             receipts.forEach(receipt => {
                 const date = receipt.date || '';
@@ -478,6 +567,7 @@
                 const inn = (receipt.inn || '').replace(/;/g, ',');
                 const address = (receipt.address || '').replace(/;/g, ',');
                 const checkNum = (receipt.checkNumber || '').replace(/;/g, ',');
+                const shiftNum = (receipt.shiftNumber || '').replace(/;/g, ',');
                 const cashier = (receipt.cashier || '').replace(/;/g, ',');
                 const qr = receipt.qr.replace(/;/g, ',').replace(/"/g, '""');
                 
@@ -493,13 +583,14 @@
                         const csvInn = idx === 0 ? inn : '';
                         const csvAddress = idx === 0 ? address : '';
                         const csvCheckNum = idx === 0 ? checkNum : '';
+                        const csvShiftNum = idx === 0 ? shiftNum : '';
                         const csvCashier = idx === 0 ? cashier : '';
                         const csvQR = idx === 0 ? qr : '';
                         
-                        txtContent += csvDate + ';' + csvTotal + ';' + csvShop + ';' + csvInn + ';' + csvAddress + ';' + csvCheckNum + ';' + csvCashier + ';"' + name + '";' + qty + ';' + price + ';' + csvQR + '\n';
+                        txtContent += csvDate + ';' + csvTotal + ';' + csvShop + ';' + csvInn + ';' + csvAddress + ';' + csvCheckNum + ';' + csvShiftNum + ';' + csvCashier + ';"' + name + '";' + qty + ';' + price + ';' + csvQR + '\n';
                     });
                 } else {
-                    txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + cashier + ';"Без детализации";1;' + total + ';' + qr + '\n';
+                    txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';"Без детализации";1;' + total + ';' + qr + '\n';
                 }
             });
             
@@ -513,16 +604,18 @@
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
-            addLog('💼 Файл ' + filename + ' скачан!', 'success');
+            addLog('💼 Файл ' + filename + ' скачан! (' + receipts.length + ' чеков)', 'success');
         }
 
         function clearCodes() {
             let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
             if (receipts.length === 0) { addLog('Нет чеков для удаления', 'error'); return; }
-            if (confirm('⚠️ Удалить ВСЕ ' + receipts.length + ' чеков?')) {
+            if (confirm('⚠️ Удалить ВСЕ ' + receipts.length + ' чеков и кэш?\n\nЭто действие нельзя отменить!')) {
                 localStorage.removeItem('receipts');
+                localStorage.removeItem('receipts_cache');
                 loadSavedCodes();
-                addLog('🗑️ Все чеки удалены', 'success');
+                updateCacheInfo();
+                addLog('️ Все чеки и кэш удалены', 'success');
             }
         }
     </script>
