@@ -372,13 +372,24 @@
             }
 
             // Перезапуск камеры с задержкой
-            scanning = false;
-            scanTimeout = setTimeout(() => {
-                if (document.getElementById('scanBtn').classList.contains('scanning')) {
-                    scanning = true;
-                    requestAnimationFrame(tick);
-                }
-            }, 2000);
+               // ПОЛНАЯ ОСТАНОВКА КАМЕРЫ после сканирования
+    scanning = false;
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
+    if (scanTimeout) {
+        clearTimeout(scanTimeout);
+        scanTimeout = null;
+    }
+    
+    // Возвращаем кнопку в исходное состояние
+    const btn = document.getElementById('scanBtn');
+    btn.textContent = '📷 Начать сканирование';
+    btn.classList.remove('scanning');
+    
+    addLog('⏹️ Камера остановлена', 'info');
+}
         }
 
         function saveBasicReceipt(qrData, receipts) {
