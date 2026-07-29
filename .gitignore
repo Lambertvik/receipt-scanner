@@ -1,0 +1,6 @@
+# Игнорируем файлы с токенами
+config.js
+.env
+*.env
+secrets.json
+*.log
