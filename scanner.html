@@ -150,7 +150,7 @@
         <button class="btn-clear-log" onclick="clearLog()">🗑️ Очистить лог</button>
     </div>
     
-    <div class="footer">v12.2 | Финальная стабильная версия</div>
+    <div class="footer">v13.0 | Идеальный формат для 1С (запятые в суммах)</div>
 
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script>
@@ -188,7 +188,6 @@
             const receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
             const cache = JSON.parse(localStorage.getItem('receipts_cache') || '{}');
             const cacheCount = Object.keys(cache).length;
-            
             const today = new Date().toDateString();
             const dailyStats = JSON.parse(localStorage.getItem('daily_stats') || '{}');
             const todayRequests = dailyStats[today] || 0;
@@ -198,11 +197,8 @@
         }
 
         function toggleScan() { 
-            try {
-                scanning ? stopScan() : startScan(); 
-            } catch (error) {
-                alert('❌ Ошибка: ' + error.message);
-            }
+            try { scanning ? stopScan() : startScan(); } 
+            catch (error) { alert('❌ Ошибка: ' + error.message); }
         }
 
         function startScan() {
@@ -256,7 +252,6 @@
 
         async function handleScan(qrData) {
             if (isProcessing) return;
-            
             const now = Date.now();
             if (now - lastScanTime < SCAN_COOLDOWN) return;
             lastScanTime = now;
@@ -312,7 +307,6 @@
 
                 const text = await response.text();
                 addLog('HTTP: ' + response.status, 'info');
-
                 const data = JSON.parse(text);
 
                 if (data.code === 1) {
@@ -345,7 +339,6 @@
 
                     receipts.push(receiptObj);
                     localStorage.setItem('receipts', JSON.stringify(receipts));
-                    
                     cache[qrData] = receiptObj;
                     localStorage.setItem('receipts_cache', JSON.stringify(cache));
                     
@@ -361,26 +354,18 @@
                 } else {
                     addLog('❌ Ошибка API (code=' + data.code + ')', 'error');
                 }
-
             } catch (error) {
                 addLog('❌ Ошибка: ' + error.message, 'error');
             } finally {
                 isProcessing = false;
             }
-
             stopCamera();
         }
 
         function stopCamera() {
             scanning = false;
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                stream = null;
-            }
-            if (scanTimeout) {
-                clearTimeout(scanTimeout);
-                scanTimeout = null;
-            }
+            if (stream) { stream.getTracks().forEach(track => track.stop()); stream = null; }
+            if (scanTimeout) { clearTimeout(scanTimeout); scanTimeout = null; }
             const btn = document.getElementById('scanBtn');
             btn.textContent = '📷 Начать сканирование';
             btn.classList.remove('scanning');
@@ -388,20 +373,9 @@
 
         function saveBasicReceipt(qrData, receipts) {
             receipts.push({
-                qr: qrData,
-                date: parseQRDate(qrData),
-                total: parseQRSum(qrData),
-                shop: '',
-                inn: '',
-                address: '',
-                checkNumber: '',
-                shiftNumber: '',
-                cashier: '',
-                operationType: '1',
-                items: [],
-                timestamp: Date.now(),
-                status: 'partial',
-                apiError: 'API error'
+                qr: qrData, date: parseQRDate(qrData), total: parseQRSum(qrData),
+                shop: '', inn: '', address: '', checkNumber: '', shiftNumber: '', cashier: '',
+                operationType: '1', items: [], timestamp: Date.now(), status: 'partial', apiError: 'API error'
             });
             localStorage.setItem('receipts', JSON.stringify(receipts));
             loadSavedCodes();
@@ -417,7 +391,6 @@
             logEntry.className = 'log-entry log-' + type;
             logEntry.textContent = new Date().toLocaleTimeString() + ' ' + message;
             logContainer.insertBefore(logEntry, logContainer.firstChild);
-            
             while (logContainer.children.length > 50) {
                 logContainer.removeChild(logContainer.lastChild);
             }
@@ -434,20 +407,16 @@
                 const time = t.length >= 12 ? t.substr(9, 2) + ':' + t.substr(11, 2) : '';
                 return time ? date + ' ' + time : date;
             }
-            return new Date().toLocaleString('ru-RU');
+            return new Date().toLocaleDateString('ru-RU');
         }
 
         function parseQRSum(qrData) {
             const s = extractQRParam(qrData, 's');
-            if (s) {
-                return parseFloat(s).toFixed(2);
-            }
-            return '0.00';
+            return s ? parseFloat(s).toFixed(2) : '0.00';
         }
 
         function extractQRParam(qrData, paramName) {
-            const params = new URLSearchParams(qrData);
-            return params.get(paramName);
+            return new URLSearchParams(qrData).get(paramName);
         }
 
         function loadSavedCodes() {
@@ -489,7 +458,6 @@
                 } else if (receipt.status === 'partial') {
                     html += '<div style="font-size:12px;color:#ff9800;margin-top:5px">⚠️ Без состава</div>';
                 }
-                
                 div.innerHTML = html;
                 list.appendChild(div);
             });
@@ -500,7 +468,7 @@
             if (receipts.length === 0) { alert('❌ Нет сохраненных чеков!'); return; }
             
             try {
-                let csvContent = '\uFEFFДата;Сумма;Организация;ИНН;Адрес;Чек№;Смена;Кассир;QR-строка\n';
+                let csvContent = '\uFEFFДата;Сумма;Организация;ИНН;Адрес;Чек№;Смена;Кассир;Товар;Кол-во;Цена;Сумма;QR-строка\n';
                 
                 receipts.forEach(function(receipt) {
                     const date = String(receipt.date || '');
@@ -513,7 +481,25 @@
                     const cashier = String(receipt.cashier || '').replace(/;/g, ',');
                     const qr = String(receipt.qr || '').replace(/"/g, '""');
                     
-                    csvContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';"' + qr + '"\n';
+                    if (receipt.items && receipt.items.length > 0) {
+                        receipt.items.forEach(function(item, idx) {
+                            const name = String(item.name || 'Товар').replace(/;/g, ',');
+                            const qty = String(item.quantity || 1);
+                            const price = String(item.price || '0.00');
+                            const sum = String(item.sum || '0.00');
+                            
+                            csvContent += (idx === 0 ? date : '') + ';' + 
+                                          (idx === 0 ? total : '') + ';' + 
+                                          (idx === 0 ? shop : '') + ';' + 
+                                          (idx === 0 ? inn : '') + ';' + 
+                                          (idx === 0 ? address : '') + ';' + 
+                                          (idx === 0 ? checkNum : '') + ';' + 
+                                          (idx === 0 ? shiftNum : '') + ';' + 
+                                          (idx === 0 ? cashier : '') + ';"' + name + '";' + qty + ';' + price + ';' + sum + ';' + (idx === 0 ? qr : '') + '\n';
+                        });
+                    } else {
+                        csvContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';"Без детализации";1;' + total + ';' + total + ';' + qr + '\n';
+                    }
                 });
                 
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -521,17 +507,18 @@
                 const filename = 'Чеки_ФНС_' + new Date().toISOString().slice(0,10) + '.csv';
                 
                 const link = document.createElement('a');
-                link.href = url;
-                link.download = filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                link.href = url; link.download = filename;
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
                 URL.revokeObjectURL(url);
-                
                 alert('✅ Файл ' + filename + ' скачан!');
             } catch (error) {
                 alert('❌ Ошибка экспорта: ' + error.message);
             }
+        }
+
+        // === ГЛАВНОЕ ИСПРАВЛЕНИЕ ДЛЯ 1С: ЗАМЕНА ТОЧКИ НА ЗАПЯТУЮ В ЧИСЛАХ ===
+        function formatFor1C(numStr) {
+            return String(numStr || '0.00').replace('.', ',');
         }
 
         function exportTo1C() {
@@ -539,24 +526,27 @@
             if (receipts.length === 0) { alert('❌ Нет сохраненных чеков!'); return; }
             
             try {
-                let txtContent = '#1C:UNF\n#Version:1.0\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Item,Quantity,Price,QRString\n\n';
+                // Заголовки, которые 1С легко распознает
+                let txtContent = 'Дата;СуммаДокумента;Контрагент;ИНН;Адрес;НомерЧека;Смена;Кассир;Номенклатура;Количество;Цена;Сумма;QRкод\n';
                 
                 receipts.forEach(function(receipt) {
+                    // Форматируем числа с запятой для 1С!
                     const date = String(receipt.date || '');
-                    const total = String(receipt.total || '0.00');
+                    const total = formatFor1C(receipt.total);
                     const shop = String(receipt.shop || '').replace(/;/g, ',');
-                    const inn = String(receipt.inn || '').replace(/;/g, ',');
+                    const inn = String(receipt.inn || '');
                     const address = String(receipt.address || '').replace(/;/g, ',');
-                    const checkNum = String(receipt.checkNumber || '').replace(/;/g, ',');
-                    const shiftNum = String(receipt.shiftNumber || '').replace(/;/g, ',');
+                    const checkNum = String(receipt.checkNumber || '');
+                    const shiftNum = String(receipt.shiftNumber || '');
                     const cashier = String(receipt.cashier || '').replace(/;/g, ',');
                     const qr = String(receipt.qr || '').replace(/;/g, ',').replace(/"/g, '""');
                     
                     if (receipt.items && receipt.items.length > 0) {
                         receipt.items.forEach(function(item, idx) {
                             const name = String(item.name || 'Товар').replace(/;/g, ',');
-                            const qty = String(item.quantity || 1);
-                            const price = String(item.price || '0.00');
+                            const qty = formatFor1C(item.quantity);
+                            const price = formatFor1C(item.price);
+                            const sum = formatFor1C(item.sum);
                             
                             txtContent += (idx === 0 ? date : '') + ';' + 
                                           (idx === 0 ? total : '') + ';' + 
@@ -565,26 +555,22 @@
                                           (idx === 0 ? address : '') + ';' + 
                                           (idx === 0 ? checkNum : '') + ';' + 
                                           (idx === 0 ? shiftNum : '') + ';' + 
-                                          (idx === 0 ? cashier : '') + ';"' + name + '";' + qty + ';' + price + ';' + (idx === 0 ? qr : '') + '\n';
+                                          (idx === 0 ? cashier : '') + ';"' + name + '";' + qty + ';' + price + ';' + sum + ';' + (idx === 0 ? qr : '') + '\n';
                         });
                     } else {
-                        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';"Без детализации";1;' + total + ';' + qr + '\n';
+                        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';"Расходы по чеку";1;' + total + ';' + total + ';' + qr + '\n';
                     }
                 });
                 
                 const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
-                const filename = '1C_Чеки_' + new Date().toISOString().slice(0,10) + '.txt';
+                const filename = 'Загрузка_1С_' + new Date().toISOString().slice(0,10) + '.txt';
                 
                 const link = document.createElement('a');
-                link.href = url;
-                link.download = filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                link.href = url; link.download = filename;
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
                 URL.revokeObjectURL(url);
-                
-                alert('✅ Файл ' + filename + ' скачан!');
+                alert('✅ Файл ' + filename + ' скачан! Готов к загрузке в 1С.');
             } catch (error) {
                 alert('❌ Ошибка экспорта: ' + error.message);
             }
@@ -592,14 +578,11 @@
 
         function clearCodes() {
             let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
-            if (receipts.length === 0) { 
-                alert('Нет чеков для удаления');
-                return; 
-            }
+            if (receipts.length === 0) { alert('Нет чеков для удаления'); return; }
             if (confirm('⚠️ Удалить ВСЕ ' + receipts.length + ' чеков и кэш?\n\nЭто действие нельзя отменить!')) {
                 localStorage.removeItem('receipts');
                 localStorage.removeItem('receipts_cache');
-                localStorage.removeItem('daily_stats'); // <-- ВАЖНО: сбрасывает счётчик лимита API
+                localStorage.removeItem('daily_stats');
                 loadSavedCodes();
                 updateCacheInfo();
                 addLog('🗑️ Все чеки и кэш удалены', 'success');
