@@ -187,88 +187,92 @@
         }
 
         async function handleScan(qrData) {
-            let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
-            
-            if (receipts.some(r => r.qr === qrData)) {
-                showStatus('⚠️ Этот чек уже сохранен!', 'error');
-                if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-                return;
-            }
+    let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
+    
+    if (receipts.some(r => r.qr === qrData)) {
+        showStatus('⚠️ Чек уже сохранен!', 'error');
+        return;
+    }
 
-            // Если токен не вписан, сохраняем без API, чтобы не терять данные
-            if (API_TOKEN === "ВАШ_ТОКЕН_ЗДЕСЬ" || API_TOKEN === "") {
-                console.warn('Токен не указан в коде!');
-                saveBasicReceipt(qrData, receipts);
-                return;
-            }
+    if (API_TOKEN === "ВАШ_ТОКЕН_ЗДЕСЬ" || API_TOKEN === "") {
+        showStatus('❌ ТОКЕН НЕ ВПИСАН В КОД! Откройте scanner.html и вставьте токен в строку API_TOKEN', 'error');
+        return;
+    }
 
-            showStatus('🔄 Запрос к API...', 'info');
-            
-            let receiptObj = {
-                qr: qrData,
-                date: parseQRDate(qrData),
-                total: parseQRSum(qrData),
-                items: [],
-                timestamp: Date.now(),
-                status: 'partial'
-            };
-
-            try {
-                // Правильный endpoint согласно документации proverkacheka.com [[11]]
-                const response = await fetch('https://proverkacheka.com/api/v1/check/get', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        qr: qrData,
-                        token: API_TOKEN
-                    })
-                });
-                
-                console.log('API Response Status:', response.status);
-                const data = await response.json();
-                console.log('API Response Data:', data);
-                
-                if (response.ok && (data.success || data.code === 0 || data.status === 'ok')) {
-                    const receiptData = data.data || data;
-                    
-                    receiptObj = {
-                        qr: qrData,
-                        date: receiptData.dateTime || receiptData.date || parseQRDate(qrData),
-                        total: receiptData.totalSum ? (receiptData.totalSum / 100).toFixed(2) : (receiptData.total || parseQRSum(qrData)),
-                        shop: receiptData.user || receiptData.retailPlace || '',
-                        items: receiptData.items || [],
-                        timestamp: Date.now(),
-                        status: 'ok'
-                    };
-                    
-                    if (navigator.vibrate) navigator.vibrate(200);
-                    showStatus('✅ Чек расшифрован!', 'success');
-                } else {
-                    throw new Error(data.message || data.error || 'API вернул ошибку');
-                }
-                
-            } catch (error) {
-                console.error('API Error:', error);
-                showStatus('⚠️ Ошибка API: ' + error.message, 'error');
-                receiptObj.apiError = error.message;
-            }
-            
-            receipts.push(receiptObj);
-            localStorage.setItem('receipts', JSON.stringify(receipts));
-            loadSavedCodes();
-            
-            scanning = false;
-            scanTimeout = setTimeout(() => {
-                if (document.getElementById('scanBtn').classList.contains('scanning')) {
-                    scanning = true;
-                    requestAnimationFrame(tick);
-                }
-            }, 1500);
+    showStatus('🔄 Запрос к API proverkacheka.com...', 'info');
+    
+    try {
+        // Пробуем правильный endpoint
+        const response = await fetch('https://proverkacheka.com/api/v1/check/get', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                token: API_TOKEN,
+                qr: qrData
+            })
+        });
+        
+        console.log('HTTP Status:', response.status);
+        const data = await response.json();
+        console.log('API Response:', data);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${data.message || data.error || 'Неизвестная ошибка'}`);
         }
-
+        
+        if (data.code !== 0 && data.code !== '0' && !data.success) {
+            throw new Error(`API Error ${data.code}: ${data.message || data.desc || 'Неизвестная ошибка API'}`);
+        }
+        
+        // Успех! Парсим данные
+        const receiptData = data.data || data;
+        
+        let receiptObj = {
+            qr: qrData,
+            date: receiptData.dateTime || parseQRDate(qrData),
+            total: receiptData.totalSum ? (parseFloat(receiptData.totalSum) / 100).toFixed(2) : parseQRSum(qrData),
+            shop: receiptData.user || receiptData.retailPlace || '',
+            items: receiptData.items || [],
+            timestamp: Date.now(),
+            status: 'ok'
+        };
+        
+        receipts.push(receiptObj);
+        localStorage.setItem('receipts', JSON.stringify(receipts));
+        
+        if (navigator.vibrate) navigator.vibrate(200);
+        showStatus(`✅ Чек расшифрован! Товаров: ${receiptObj.items.length}`, 'success');
+        loadSavedCodes();
+        
+    } catch (error) {
+        console.error('Full error:', error);
+        showStatus(`❌ API ОШИБКА: ${error.message}\n\nПроверьте токен и интернет`, 'error');
+        
+        // Всё равно сохраняем базовые данные
+        receipts.push({
+            qr: qrData,
+            date: parseQRDate(qrData),
+            total: parseQRSum(qrData),
+            items: [],
+            timestamp: Date.now(),
+            status: 'partial',
+            apiError: error.message
+        });
+        localStorage.setItem('receipts', JSON.stringify(receipts));
+        loadSavedCodes();
+    }
+    
+    scanning = false;
+    scanTimeout = setTimeout(() => {
+        if (document.getElementById('scanBtn').classList.contains('scanning')) {
+            scanning = true;
+            requestAnimationFrame(tick);
+        }
+    }, 1500);
+}
         function saveBasicReceipt(qrData, receipts) {
             receipts.push({
                 qr: qrData,
