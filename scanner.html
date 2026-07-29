@@ -20,6 +20,35 @@
             box-shadow: 0 10px 40px rgba(0,0,0,0.3); max-width: 600px; margin: 0 auto;
         }
         h1 { color: #333; text-align: center; margin-bottom: 15px; font-size: 24px; }
+        
+        /* Стили для выбора категории */
+        .category-selector {
+            margin-bottom: 15px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border: 1px solid #e0e0e0;
+        }
+        .category-selector label {
+            display: block;
+            font-size: 13px;
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 6px;
+        }
+        .category-selector select {
+            width: 100%;
+            padding: 10px;
+            font-size: 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background: white;
+            outline: none;
+        }
+        .category-selector select:focus {
+            border-color: #4CAF50;
+        }
+
         .video-container {
             position: relative; width: 100%; border-radius: 12px; overflow: hidden;
             background: #000; margin-bottom: 15px;
@@ -60,6 +89,16 @@
         .code-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: bold; color: #333; }
         .receipt-summary { font-size: 18px; color: #333; margin-bottom: 8px; font-weight: 700; }
         .receipt-info { font-size: 13px; color: #555; margin-bottom: 4px; word-break: break-word; }
+        .category-badge {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
         .receipt-qr-string { 
             font-family: monospace; font-size: 11px; color: #666; 
             background: #f5f5f5; padding: 8px; border-radius: 4px;
@@ -127,6 +166,12 @@
         <div class="cache-info" id="cacheInfo">
              💾 Кэш: 0 чеков | API: 0/15 запросов сегодня
         </div>
+
+        <!-- ВЫБОР КАТЕГОРИИ -->
+        <div class="category-selector">
+            <label for="categorySelect">📂 Категория расхода (применится к следующим чекам):</label>
+            <select id="categorySelect"></select>
+        </div>
         
         <div class="video-container">
             <video id="video" playsinline></video>
@@ -150,10 +195,26 @@
         <button class="btn-clear-log" onclick="clearLog()">🗑️ Очистить лог</button>
     </div>
     
-    <div class="footer">v13.0 | Идеальный формат для 1С (запятые в суммах)</div>
+    <div class="footer">v14.0 | Категории расходов | Идеально для 1С</div>
 
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script>
+        // ==========================================
+        // 🛠️ НАСТРОЙКИ: ЛЕГКО ДОБАВЛЯЙТЕ КАТЕГОРИИ СЮДА
+        // ==========================================
+        const CATEGORIES = [
+            { id: "uncategorized", name: "Не указано" },
+            { id: "products", name: "Продукты" },
+            { id: "construction", name: "Стройматериалы" },
+            { id: "fuel", name: "Бензин / ГСМ" },
+            { id: "pharmacy", name: "Аптека" },
+            { id: "household", name: "Хозтовары" },
+            { id: "clothes", name: "Одежда / Обувь" },
+            { id: "electronics", name: "Электроника" },
+            { id: "services", name: "Услуги" }
+            // Чтобы добавить новую, просто скопируйте строку выше и измените id и name
+        ];
+
         const API_TOKEN = "53441.ZLqLc0Gvo8gziNZXF"; 
         
         let isProcessing = false;
@@ -172,11 +233,23 @@
         }
 
         window.onload = function() { 
+            initCategories();
             loadSavedCodes(); 
             checkCameraPermission();
             updateCacheInfo();
             addLog('✅ Сканер готов к работе', 'success');
         };
+
+        // Инициализация выпадающего списка категорий
+        function initCategories() {
+            const select = document.getElementById('categorySelect');
+            CATEGORIES.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.name;
+                option.textContent = cat.name;
+                select.appendChild(option);
+            });
+        }
 
         function checkCameraPermission() {
             navigator.permissions.query({ name: 'camera' }).then(result => {
@@ -294,6 +367,9 @@
             isProcessing = true;
             addLog('🔄 Запрос к API...', 'info');
             
+            // Получаем выбранную категорию
+            const selectedCategory = document.getElementById('categorySelect').value;
+
             try {
                 const formData = new URLSearchParams();
                 formData.append('qrraw', qrData);
@@ -318,6 +394,7 @@
                     
                     let receiptObj = {
                         qr: qrData,
+                        category: selectedCategory, // <-- ДОБАВЛЕНА КАТЕГОРИЯ
                         date: json.ticketDate || parseQRDate(qrData),
                         total: json.totalSum ? (parseFloat(json.totalSum) / 100).toFixed(2) : parseQRSum(qrData),
                         shop: String(json.user || ''),
@@ -372,8 +449,12 @@
         }
 
         function saveBasicReceipt(qrData, receipts) {
+            const selectedCategory = document.getElementById('categorySelect').value;
             receipts.push({
-                qr: qrData, date: parseQRDate(qrData), total: parseQRSum(qrData),
+                qr: qrData, 
+                category: selectedCategory, // <-- ДОБАВЛЕНА КАТЕГОРИЯ
+                date: parseQRDate(qrData), 
+                total: parseQRSum(qrData),
                 shop: '', inn: '', address: '', checkNumber: '', shiftNumber: '', cashier: '',
                 operationType: '1', items: [], timestamp: Date.now(), status: 'partial', apiError: 'API error'
             });
@@ -439,6 +520,12 @@
                 if (receipt.status === 'partial') div.classList.add('partial-border');
                 
                 let html = '<div class="code-header"><span>Чек #' + realIndex + '</span><span>' + receipt.date + '</span></div>';
+                
+                // Отображение категории
+                if (receipt.category && receipt.category !== 'Не указано') {
+                    html += '<div class="category-badge">📂 ' + receipt.category + '</div>';
+                }
+                
                 html += '<div class="receipt-summary">💰 ' + receipt.total + ' ₽</div>';
                 
                 if (receipt.shop) html += '<div class="receipt-info">🏪 ' + receipt.shop + '</div>';
@@ -463,16 +550,21 @@
             });
         }
 
+        function formatFor1C(numStr) {
+            return String(numStr || '0.00').replace('.', ',');
+        }
+
         function exportToExcel() {
             let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
             if (receipts.length === 0) { alert('❌ Нет сохраненных чеков!'); return; }
             
             try {
-                let csvContent = '\uFEFFДата;Сумма;Организация;ИНН;Адрес;Чек№;Смена;Кассир;Товар;Кол-во;Цена;Сумма;QR-строка\n';
+                let csvContent = '\uFEFFДата;Сумма;Категория;Организация;ИНН;Адрес;Чек№;Смена;Кассир;Товар;Кол-во;Цена;Сумма;QR-строка\n';
                 
                 receipts.forEach(function(receipt) {
                     const date = String(receipt.date || '');
                     const total = String(receipt.total || '0.00');
+                    const category = String(receipt.category || 'Не указано').replace(/;/g, ',');
                     const shop = String(receipt.shop || '').replace(/;/g, ',');
                     const inn = String(receipt.inn || '').replace(/;/g, ',');
                     const address = String(receipt.address || '').replace(/;/g, ',');
@@ -490,6 +582,7 @@
                             
                             csvContent += (idx === 0 ? date : '') + ';' + 
                                           (idx === 0 ? total : '') + ';' + 
+                                          (idx === 0 ? category : '') + ';' + 
                                           (idx === 0 ? shop : '') + ';' + 
                                           (idx === 0 ? inn : '') + ';' + 
                                           (idx === 0 ? address : '') + ';' + 
@@ -498,7 +591,7 @@
                                           (idx === 0 ? cashier : '') + ';"' + name + '";' + qty + ';' + price + ';' + sum + ';' + (idx === 0 ? qr : '') + '\n';
                         });
                     } else {
-                        csvContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';"Без детализации";1;' + total + ';' + total + ';' + qr + '\n';
+                        csvContent += date + ';' + total + ';' + category + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';"Без детализации";1;' + total + ';' + total + ';' + qr + '\n';
                     }
                 });
                 
@@ -516,23 +609,18 @@
             }
         }
 
-        // === ГЛАВНОЕ ИСПРАВЛЕНИЕ ДЛЯ 1С: ЗАМЕНА ТОЧКИ НА ЗАПЯТУЮ В ЧИСЛАХ ===
-        function formatFor1C(numStr) {
-            return String(numStr || '0.00').replace('.', ',');
-        }
-
         function exportTo1C() {
             let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
             if (receipts.length === 0) { alert('❌ Нет сохраненных чеков!'); return; }
             
             try {
-                // Заголовки, которые 1С легко распознает
-                let txtContent = 'Дата;СуммаДокумента;Контрагент;ИНН;Адрес;НомерЧека;Смена;Кассир;Номенклатура;Количество;Цена;Сумма;QRкод\n';
+                // Добавлено поле Категория после СуммыДокумента
+                let txtContent = 'Дата;СуммаДокумента;Категория;Контрагент;ИНН;Адрес;НомерЧека;Смена;Кассир;Номенклатура;Количество;Цена;Сумма;QRкод\n';
                 
                 receipts.forEach(function(receipt) {
-                    // Форматируем числа с запятой для 1С!
                     const date = String(receipt.date || '');
                     const total = formatFor1C(receipt.total);
+                    const category = String(receipt.category || 'Не указано').replace(/;/g, ',');
                     const shop = String(receipt.shop || '').replace(/;/g, ',');
                     const inn = String(receipt.inn || '');
                     const address = String(receipt.address || '').replace(/;/g, ',');
@@ -550,6 +638,7 @@
                             
                             txtContent += (idx === 0 ? date : '') + ';' + 
                                           (idx === 0 ? total : '') + ';' + 
+                                          (idx === 0 ? category : '') + ';' + 
                                           (idx === 0 ? shop : '') + ';' + 
                                           (idx === 0 ? inn : '') + ';' + 
                                           (idx === 0 ? address : '') + ';' + 
@@ -558,7 +647,7 @@
                                           (idx === 0 ? cashier : '') + ';"' + name + '";' + qty + ';' + price + ';' + sum + ';' + (idx === 0 ? qr : '') + '\n';
                         });
                     } else {
-                        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';"Расходы по чеку";1;' + total + ';' + total + ';' + qr + '\n';
+                        txtContent += date + ';' + total + ';' + category + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';"Расходы по чеку";1;' + total + ';' + total + ';' + qr + '\n';
                     }
                 });
                 
