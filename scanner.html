@@ -603,14 +603,23 @@
         }
 
         function clearCodes() {
-            let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
-            if (receipts.length === 0) { addLog('Нет чеков для удаления', 'error'); return; }
-            if (confirm('⚠️ Удалить ВСЕ ' + receipts.length + ' чеков и кэш?')) {
-                localStorage.removeItem('receipts');
-                localStorage.removeItem('receipts_cache');
-                loadSavedCodes();
-                updateCacheInfo();
-                addLog('🗑️ Все чеки и кэш удалены', 'success');
+    let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
+    if (receipts.length === 0) { 
+        alert('Нет чеков для удаления');
+        return; 
+    }
+    if (confirm('⚠️ Удалить ВСЕ ' + receipts.length + ' чеков и кэш?\n\nЭто действие нельзя отменить!')) {
+        // Очищаем ВСЕ хранилища
+        localStorage.removeItem('receipts');
+        localStorage.removeItem('receipts_cache');
+        localStorage.removeItem('daily_stats');
+        
+        loadSavedCodes();
+        updateCacheInfo();
+        addLog('🗑️ Все чеки и кэш удалены', 'success');
+        alert('✅ Все чеки удалены! Можно сканировать заново.');
+    }
+}
             }
         }
     </script>
