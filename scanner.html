@@ -52,11 +52,18 @@
         .codes-container { margin-top: 20px; max-height: 600px; overflow-y: auto; }
         .code-item { 
             padding: 15px; margin: 10px 0; background: #f8f9fa; 
-            border-left: 5px solid #4CAF50; border-radius: 8px; position: relative;
+            border-left: 5px solid #4CAF50; border-radius: 8px;
         }
         .code-item.partial-border { border-left-color: #ff9800; }
         .code-item.no-category { border-left-color: #9e9e9e; }
-        .code-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: bold; color: #333; }
+        .code-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            margin-bottom: 8px; 
+            font-weight: bold; 
+            color: #333;
+        }
         .receipt-summary { font-size: 18px; color: #333; margin-bottom: 8px; font-weight: 700; }
         .receipt-info { font-size: 13px; color: #555; margin-bottom: 4px; word-break: break-word; }
         .receipt-qr-string { 
@@ -138,9 +145,6 @@
             background: white;
         }
         .btn-delete {
-            position: absolute;
-            top: 10px;
-            right: 10px;
             background: #f44336;
             color: white;
             border: none;
@@ -153,6 +157,8 @@
             align-items: center;
             justify-content: center;
             transition: all 0.3s;
+            flex-shrink: 0;
+            margin-left: 10px;
         }
         .btn-delete:active { transform: scale(0.9); }
         .category-badge {
@@ -196,15 +202,12 @@
         <button class="btn-clear-log" onclick="clearLog()">🗑️ Очистить лог</button>
     </div>
     
-    <div class="footer">v13.1 | Категории + Удаление + Вибрация</div>
+    <div class="footer">v13.1 | Категории + Удаление + Вибрация + Способ оплаты</div>
 
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script>
         const API_TOKEN = "53441.ZLqLc0Gvo8gziNZXF"; 
         
-        // ==========================================
-        // 🛠️ НАСТРОЙКИ: ЛЕГКО ДОБАВЛЯЙТЕ КАТЕГОРИИ СЮДА
-        // ==========================================
         const CATEGORIES = [
             { id: "uncategorized", name: "Не указано" },
             { id: "products", name: "Продукты" },
@@ -295,6 +298,26 @@
             requestAnimationFrame(tick);
         }
 
+        function determinePaymentMethod(cashTotalSum, ecashTotalSum) {
+            const cash = cashTotalSum ? parseFloat(cashTotalSum) / 100 : 0;
+            const card = ecashTotalSum ? parseFloat(ecashTotalSum) / 100 : 0;
+            
+            if (cash > 0 && card > 0) return 'mixed';
+            if (cash > 0) return 'cash';
+            if (card > 0) return 'card';
+            return 'unknown';
+        }
+
+        function getPaymentMethodName(method) {
+            const names = {
+                'cash': '💵 Наличные',
+                'card': '💳 Карта',
+                'mixed': '💵💳 Смешанная',
+                'unknown': '❓ Неизвестно'
+            };
+            return names[method] || '❓ Неизвестно';
+        }
+
         async function handleScan(qrData) {
             if (isProcessing) return;
             const now = Date.now();
@@ -356,6 +379,8 @@
                     const json = data.data.json;
                     const address = String(json.retailPlaceAddres || json.retailPlaceAddress || json.address || '');
                     
+                    const paymentMethod = determinePaymentMethod(json.cashTotalSum, json.ecashTotalSum);
+                    
                     let receiptObj = {
                         qr: qrData,
                         date: json.ticketDate || parseQRDate(qrData),
@@ -367,7 +392,10 @@
                         shiftNumber: String(json.shiftNumber || ''),
                         cashier: String(json.operator || ''),
                         operationType: String(json.operationType || '1'),
-                        category: 'uncategorized', // По умолчанию
+                        category: 'uncategorized',
+                        cashTotalSum: json.cashTotalSum ? parseFloat(json.cashTotalSum) / 100 : 0,
+                        ecashTotalSum: json.ecashTotalSum ? parseFloat(json.ecashTotalSum) / 100 : 0,
+                        paymentMethod: paymentMethod,
                         items: (json.items || []).map(item => ({
                             name: String(item.name || 'Товар'),
                             quantity: item.quantity || 1,
@@ -383,10 +411,9 @@
                     cache[qrData] = receiptObj;
                     localStorage.setItem('receipts_cache', JSON.stringify(cache));
                     
-                    // Вибрация при успехе (если поддерживается устройством)
                     if (navigator.vibrate) navigator.vibrate(200);
                     
-                    addLog('✅ Чек расшифрован! Товаров: ' + receiptObj.items.length, 'success');
+                    addLog('✅ Чек расшифрован! Товаров: ' + receiptObj.items.length + ' | Оплата: ' + getPaymentMethodName(paymentMethod), 'success');
                     loadSavedCodes();
                     updateCacheInfo();
                 } else {
@@ -408,6 +435,9 @@
                 shop: '', inn: '', address: '',
                 checkNumber: '', shiftNumber: '', cashier: '',
                 operationType: '1', category: 'uncategorized',
+                cashTotalSum: 0,
+                ecashTotalSum: 0,
+                paymentMethod: 'unknown',
                 items: [],
                 timestamp: Date.now(),
                 status: 'partial'
@@ -514,8 +544,9 @@
                 if (receipt.status === 'partial') div.classList.add('partial-border');
                 if (!receipt.category || receipt.category === 'uncategorized') div.classList.add('no-category');
                 
-                let html = '<button class="btn-delete" onclick="deleteReceipt(' + arrayIndex + ')" title="Удалить чек">✕</button>';
-                html += '<div class="code-header"><span>Чек #' + realIndex + '</span><span>' + receipt.date + '</span></div>';
+                let html = '<div class="code-header"><span>Чек #' + realIndex + '</span><span>' + receipt.date + '</span>';
+                html += '<button class="btn-delete" onclick="deleteReceipt(' + arrayIndex + ')" title="Удалить чек">✕</button>';
+                html += '</div>';
                 html += '<div class="receipt-summary">💰 ' + receipt.total + ' ₽</div>';
                 
                 if (receipt.shop) html += '<div class="receipt-info">🏪 ' + receipt.shop + '</div>';
@@ -523,6 +554,13 @@
                 if (receipt.address) html += '<div class="receipt-info">📍 ' + receipt.address + '</div>';
                 if (receipt.checkNumber) html += '<div class="receipt-info">🧾 Чек № ' + receipt.checkNumber + '</div>';
                 if (receipt.cashier) html += '<div class="receipt-info">👤 Кассир: ' + receipt.cashier + '</div>';
+                
+                if (receipt.paymentMethod) {
+                    html += '<div class="receipt-info">💰 ' + getPaymentMethodName(receipt.paymentMethod);
+                    if (receipt.cashTotalSum && receipt.cashTotalSum > 0) html += ' (нал: ' + receipt.cashTotalSum.toFixed(2) + ' ₽)';
+                    if (receipt.ecashTotalSum && receipt.ecashTotalSum > 0) html += ' (карта: ' + receipt.ecashTotalSum.toFixed(2) + ' ₽)';
+                    html += '</div>';
+                }
                 
                 html += '<div class="category-selector">';
                 html += '<label>📁 Категория для 1С:</label>';
@@ -565,7 +603,7 @@
             }
             
             try {
-                let csvContent = '\uFEFFДата;Сумма;Организация;ИНН;Адрес;Чек№;Смена;Кассир;Категория;QR-строка\n';
+                let csvContent = '\uFEFFДата;Сумма;Организация;ИНН;Адрес;Чек№;Смена;Кассир;Категория;СпособОплаты;QR-строка\n';
                 
                 receipts.forEach(function(receipt) {
                     const date = String(receipt.date || '');
@@ -577,9 +615,10 @@
                     const shiftNum = String(receipt.shiftNumber || '').replace(/;/g, ',');
                     const cashier = String(receipt.cashier || '').replace(/;/g, ',');
                     const category = getCategoryName(receipt.category || 'uncategorized');
+                    const paymentMethod = getPaymentMethodName(receipt.paymentMethod || 'unknown');
                     const qr = String(receipt.qr || '').replace(/"/g, '""');
                     
-                    csvContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';"' + qr + '"\n';
+                    csvContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';"' + qr + '"\n';
                 });
                 
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -602,66 +641,63 @@
         }
 
         function exportTo1C() {
-    let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
-    if (receipts.length === 0) { 
-        alert('❌ Нет сохраненных чеков!');
-        return; 
-    }
-    
-    try {
-        // Точный заголовок для 1С:УНФ
-        let txtContent = '#1C:UNF\n';
-        txtContent += '#Version:1.0\n';
-        txtContent += '#Encoding:UTF-8\n';
-        txtContent += '#Separator:;\n';
-        txtContent += '#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,Item,Quantity,Price,QRString\n\n';
-        
-        receipts.forEach(function(receipt) {
-            const date = String(receipt.date || '');
-            const total = String(receipt.total || '0.00');
-            const shop = String(receipt.shop || '').replace(/;/g, ',');
-            const inn = String(receipt.inn || '').replace(/;/g, ',');
-            const address = String(receipt.address || '').replace(/;/g, ',');
-            const checkNum = String(receipt.checkNumber || '').replace(/;/g, ',');
-            const shiftNum = String(receipt.shiftNumber || '').replace(/;/g, ',');
-            const cashier = String(receipt.cashier || '').replace(/;/g, ',');
-            const category = getCategoryName(receipt.category || 'uncategorized');
-            const qr = String(receipt.qr || '').replace(/;/g, ',').replace(/"/g, '""');
-            
-            if (receipt.items && receipt.items.length > 0) {
-                receipt.items.forEach(function(item) {
-                    // Добавлено экранирование кавычек для названия товара
-                    const name = String(item.name || 'Товар').replace(/;/g, ',').replace(/"/g, '""');
-                    const qty = String(item.quantity || 1);
-                    const price = String(item.price || '0.00');
-                    
-                    // Данные чека повторяются для КАЖДОЙ строки товара (как в вашем примере)
-                    txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';"' + name + '";' + qty + ';' + price + ';' + qr + '\n';
-                });
-            } else {
-                txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';"Без детализации";1;' + total + ';' + qr + '\n';
+            let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
+            if (receipts.length === 0) { 
+                alert('❌ Нет сохраненных чеков!');
+                return; 
             }
-        });
-        
-        // Чистый UTF-8 без BOM (как требует заголовок #Encoding:UTF-8)
-        const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const dateStr = new Date().toISOString().slice(0,10);
-        const filename = '1C_Чеки_' + dateStr + '.txt';
-        
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        
-        alert('✅ Файл ' + filename + ' скачан!\nФормат полностью соответствует требованиям 1С:УНФ.');
-    } catch (error) {
-        alert('❌ Ошибка экспорта: ' + error.message);
-    }
-}
+            
+            try {
+                let txtContent = '#1C:UNF\n';
+                txtContent += '#Version:1.0\n';
+                txtContent += '#Encoding:UTF-8\n';
+                txtContent += '#Separator:;\n';
+                txtContent += '#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,QRString\n\n';
+                
+                receipts.forEach(function(receipt) {
+                    const date = String(receipt.date || '');
+                    const total = String(receipt.total || '0.00');
+                    const shop = String(receipt.shop || '').replace(/;/g, ',');
+                    const inn = String(receipt.inn || '').replace(/;/g, ',');
+                    const address = String(receipt.address || '').replace(/;/g, ',');
+                    const checkNum = String(receipt.checkNumber || '').replace(/;/g, ',');
+                    const shiftNum = String(receipt.shiftNumber || '').replace(/;/g, ',');
+                    const cashier = String(receipt.cashier || '').replace(/;/g, ',');
+                    const category = getCategoryName(receipt.category || 'uncategorized');
+                    const paymentMethod = getPaymentMethodName(receipt.paymentMethod || 'unknown');
+                    const qr = String(receipt.qr || '').replace(/;/g, ',').replace(/"/g, '""');
+                    
+                    if (receipt.items && receipt.items.length > 0) {
+                        receipt.items.forEach(function(item) {
+                            const name = String(item.name || 'Товар').replace(/;/g, ',').replace(/"/g, '""');
+                            const qty = String(item.quantity || 1);
+                            const price = String(item.price || '0.00');
+                            
+                            txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';"' + name + '";' + qty + ';' + price + ';' + qr + '\n';
+                        });
+                    } else {
+                        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';"Без детализации";1;' + total + ';' + qr + '\n';
+                    }
+                });
+                
+                const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const dateStr = new Date().toISOString().slice(0,10);
+                const filename = '1C_Чеки_' + dateStr + '.txt';
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                alert('✅ Файл ' + filename + ' скачан!\nФормат полностью соответствует требованиям 1С:УНФ.');
+            } catch (error) {
+                alert('❌ Ошибка экспорта: ' + error.message);
+            }
+        }
 
         function clearCodes() {
             let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
