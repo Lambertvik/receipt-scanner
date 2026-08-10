@@ -189,6 +189,12 @@
         <button class="button btn-excel" onclick="exportToExcel()">📊 Экспорт в Excel (CSV)</button>
         <button class="button btn-1c" onclick="exportTo1C()">💼 Экспорт для 1С (TXT)</button>
         <button class="button btn-clear" onclick="clearCodes()">🗑️ Очистить все</button>
+
+         <div class="category-selector" style="margin-top:15px; background:#e8f5e9; border-left-color:#4CAF50;">
+            <label style="color:#1b5e20;">⌨️ Нет чека под рукой? Вставьте строку (t=...&s=...&fn=...):</label>
+            <textarea id="manualQR" rows="3" placeholder="t=20260318T112100&s=401.77&fn=...&i=...&fp=...&n=1" style="width:100%;padding:8px;border:1px solid #4CAF50;border-radius:4px;font-size:12px;font-family:monospace;margin-top:5px;"></textarea>
+            <button class="button" style="background:#3F51B5;color:white;margin-top:8px;" onclick="addManual()">➕ Добавить чек по строке</button>
+        </div>
         
         <div class="stats">📊 Сохранено чеков: <span id="count">0</span></div>
         
@@ -699,6 +705,19 @@
             }
         }
 
+        function addManual() {
+            let qr = document.getElementById('manualQR').value.trim().replace(/\s/g, '');
+            if (!qr) { alert('⚠️ Вставьте строку чека'); return; }
+            const pos = qr.indexOf('t=');
+            if (pos === -1) { alert('⚠️ Не найден параметр t= — это не код чека'); return; }
+            if (pos > 0) qr = qr.substring(pos);
+            document.getElementById('manualQR').value = '';
+            addLog('⌨️ Ручной ввод строки чека', 'info');
+            lastScanTime = 0;
+            handleScan(qr);
+        }
+
+        
         function clearCodes() {
             let receipts = JSON.parse(localStorage.getItem('receipts') || '[]');
             if (receipts.length === 0) { 
