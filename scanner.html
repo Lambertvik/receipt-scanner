@@ -208,21 +208,21 @@
         <button class="btn-clear-log" onclick="clearLog()">🗑️ Очистить лог</button>
     </div>
     
-    <div class="footer">v13.1 | Категории + Удаление + Вибрация + Способ оплаты</div>
+    <div class="footer">v14 | Синхронизация с 1С:УНФ v74 (категории + оплата)</div>
 
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script>
         const API_TOKEN = "53441.ZLqLc0Gvo8gziNZXF"; 
         
         const CATEGORIES = [
-            { id: "uncategorized", name: "Не указано" },
+            { id: "uncategorized", name: "Без категории" },
             { id: "products", name: "Продукты" },
             { id: "construction", name: "Стройматериалы" },
-            { id: "fuel", name: "Бензин / ГСМ" },
-            { id: "pharmacy", name: "Аптека" },
-            { id: "household", name: "Хозтовары" },
-            { id: "clothes", name: "Одежда / Обувь" },
-            { id: "electronics", name: "Электроника" },
+            { id: "fuel", name: "Авто: топливо" },
+            { id: "pharmacy", name: "Медицина / Аптека" },
+            { id: "household", name: "Бытовая химия" },
+            { id: "clothes", name: "Одежда" },
+            { id: "electronics", name: "Техника" },
             { id: "services", name: "Услуги" }
         ];
 
@@ -488,7 +488,7 @@
 
         function getCategoryName(categoryId) {
             const cat = CATEGORIES.find(c => c.id === categoryId);
-            return cat ? cat.name : 'Не указано';
+            return cat ? cat.name : 'Без категории';
         }
 
         function addLog(message, type) {
@@ -670,7 +670,8 @@
                     const shiftNum = String(receipt.shiftNumber || '').replace(/;/g, ',');
                     const cashier = String(receipt.cashier || '').replace(/;/g, ',');
                     const category = getCategoryName(receipt.category || 'uncategorized');
-                    const paymentMethod = getPaymentMethodName(receipt.paymentMethod || 'unknown');
+                    // ИСПРАВЛЕНО: paymentMethod напрямую (cash/card/mixed/unknown), без эмодзи
+                    const paymentMethod = String(receipt.paymentMethod || 'unknown');
                     const qr = String(receipt.qr || '').replace(/;/g, ',').replace(/"/g, '""');
                     
                     if (receipt.items && receipt.items.length > 0) {
@@ -699,7 +700,7 @@
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
                 
-                alert('✅ Файл ' + filename + ' скачан!\nФормат полностью соответствует требованиям 1С:УНФ.');
+                alert('✅ Файл ' + filename + ' скачан!\nФормат полностью соответствует требованиям 1С:УНФ v74.');
             } catch (error) {
                 alert('❌ Ошибка экспорта: ' + error.message);
             }
