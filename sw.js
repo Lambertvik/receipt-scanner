@@ -1,60 +1,62 @@
-const CACHE_NAME = 'receipt-scanner-v1';
-const urlsToCache = [
-  '/scanner.html',
-  '/manifest.json'
+const CACHE_NAME = 'receipt-scanner-v2';
+const OFFLINE_ASSETS = [
+  './scanner.html',
+  './manifest.json',
+  './index.html',
+  'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'
 ];
 
-// Установка Service Worker
 self.addEventListener('install', event => {
-  console.log('[SW] Install');
+  console.log('[SW] Install v2');
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('[SW] Caching');
-        return cache.addAll(urlsToCache);
-      })
-      .catch(err => {
-        console.log('[SW] Cache error:', err);
-      })
+    caches.open(CACHE_NAME).then(cache =>
+      Promise.all(
+        OFFLINE_ASSETS.map(url =>
+          cache.add(url).catch(err => console.log('[SW] skip ' + url + ': ' + err))
+        )
+      )
+    )
   );
   self.skipWaiting();
 });
 
-// Активация Service Worker
 self.addEventListener('activate', event => {
-  console.log('[SW] Activate');
+  console.log('[SW] Activate v2');
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('[SW] Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    caches.keys().then(names =>
+      Promise.all(names.filter(n => n !== CACHE_NAME).map(n => caches.delete(n)))
+    )
   );
   self.clients.claim();
 });
 
-// Перехват запросов
 self.addEventListener('fetch', event => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  if (req.url.includes('proverkacheka.com')) return;
+  if (req.url.includes('/upload')) return;
+
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        if (response) {
-          return response;
+    caches.match(req).then(cached => {
+      if (cached) {
+        fetch(req).then(resp => {
+          if (resp && resp.ok && req.url.startsWith(self.location.origin)) {
+            caches.open(CACHE_NAME).then(c => c.put(req, resp.clone()));
+          }
+        }).catch(() => {});
+        return cached;
+      }
+      return fetch(req).then(resp => {
+        if (resp && resp.ok && req.url.startsWith(self.location.origin)) {
+          const clone = resp.clone();
+          caches.open(CACHE_NAME).then(c => c.put(req, clone));
         }
-        return fetch(event.request).catch(error => {
-          console.log('[SW] Fetch error:', error);
-          return new Response('Offline');
-        });
-      })
+        return resp;
+      }).catch(() => new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } }));
+    })
   );
 });
 
-// Обработка сообщений от клиента
 self.addEventListener('message', event => {
   console.log('[SW] Message:', event.data);
 });
