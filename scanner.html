@@ -1,817 +1,982 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#4CAF50">
-    <link rel="manifest" href="manifest.json">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Сканер чеков">
-    <title>Сканер чеков ФНС</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 15px; }
-        .container { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); max-width: 600px; margin: 0 auto; }
-        h1 { color: #333; text-align: center; margin-bottom: 15px; font-size: 24px; }
-        .video-container { position: relative; width: 100%; border-radius: 12px; overflow: hidden; background: #000; margin-bottom: 15px; }
-        #video { width: 100%; display: block; }
-        .scan-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 250px; height: 250px; border: 3px solid #4CAF50; border-radius: 12px; pointer-events: none; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); }
-        .scan-line { position: absolute; width: 100%; height: 3px; background: #4CAF50; animation: scan 2s linear infinite; box-shadow: 0 0 10px #4CAF50; }
-        @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
-        .button { display: block; width: 100%; padding: 16px; margin: 8px 0; font-size: 16px; font-weight: bold; border: none; border-radius: 12px; cursor: pointer; transition: all 0.3s; }
-        .button:active { transform: scale(0.98); }
-        .button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-scan { background: #4CAF50; color: white; }
-        .btn-scan.scanning { background: #ff9800; }
-        .btn-excel { background: #217346; color: white; }
-        .btn-1c { background: #FF7F3F; color: white; }
-        .btn-clear { background: #f44336; color: white; }
-        .btn-send { background: #FF7F3F; color: white; }
-        .btn-retry { background: #2196F3; color: white; }
-        .btn-resend { background: #666; color: white; font-size: 13px; padding: 10px; }
-        .stats { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 12px; text-align: center; margin: 15px 0; font-size: 20px; font-weight: bold; }
-        .codes-container { margin-top: 20px; max-height: 600px; overflow-y: auto; }
-        .code-item { padding: 15px; margin: 10px 0; background: #f8f9fa; border-left: 5px solid #4CAF50; border-radius: 8px; }
-        .code-item.partial-border { border-left-color: #ff9800; }
-        .code-item.sent-border { border-left-color: #2196F3; }
-        .code-item.no-category { border-left-color: #9e9e9e; }
-        .code-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: bold; color: #333; }
-        .receipt-summary { font-size: 18px; color: #333; margin-bottom: 8px; font-weight: 700; }
-        .receipt-info { font-size: 13px; color: #555; margin-bottom: 4px; word-break: break-word; }
-        .receipt-qr-string { font-family: monospace; font-size: 11px; color: #666; background: #f5f5f5; padding: 8px; border-radius: 4px; word-break: break-all; margin-top: 8px; }
-        .receipt-items { background: white; padding: 10px; border-radius: 6px; font-size: 13px; color: #333; margin-top: 8px; }
-        .item-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #eee; }
-        .item-name { flex: 1; font-size: 12px; }
-        .item-qty { color: #666; margin: 0 8px; font-size: 12px; }
-        .item-price { font-weight: 600; color: #4CAF50; font-size: 12px; }
-        .empty-state { text-align: center; padding: 40px; color: #999; font-style: italic; }
-        .log-container { margin-top: 20px; background: #1e1e1e; border-radius: 12px; padding: 15px; max-height: 300px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 11px; }
-        .log-entry { padding: 8px; margin: 5px 0; border-radius: 6px; word-break: break-all; }
-        .log-info { background: #2d2d2d; color: #d4d4d4; border-left: 3px solid #2196F3; }
-        .log-success { background: #1e3a1e; color: #4CAF50; border-left: 3px solid #4CAF50; }
-        .log-error { background: #3a1e1e; color: #f44336; border-left: 3px solid #f44336; }
-        .btn-clear-log { background: #666; color: white; padding: 10px; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; width: 100%; }
-        .footer { text-align: center; margin-top: 20px; color: rgba(255,255,255,0.8); font-size: 12px; }
-        .cache-info { background: #e3f2fd; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 12px; color: #1565c0; text-align: center; }
-        .category-selector { margin-top: 10px; padding: 8px; background: #fff3e0; border-radius: 6px; border-left: 3px solid #ff9800; }
-        .category-selector label { font-size: 12px; font-weight: bold; color: #e65100; display: block; margin-bottom: 5px; }
-        .category-selector select { width: 100%; padding: 8px; border: 1px solid #ff9800; border-radius: 4px; font-size: 13px; background: white; }
-        .btn-delete { background: #f44336; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s; flex-shrink: 0; margin-left: 10px; }
-        .btn-delete:active { transform: scale(0.9); }
-        .category-badge { display: inline-block; padding: 4px 8px; background: #4CAF50; color: white; border-radius: 4px; font-size: 11px; font-weight: bold; margin-top: 5px; }
-        .category-badge.no-cat { background: #9e9e9e; }
-        .badge-sent { color: #4CAF50; font-size: 12px; }
-        .badge-pending { color: #ff9800; font-size: 12px; }
-        .send-block { margin-top: 15px; padding: 12px; background: #fff3e0; border-radius: 8px; border-left: 3px solid #FF7F3F; }
-        .send-block label { font-size: 12px; font-weight: bold; color: #e65100; display: block; margin-bottom: 5px; }
-        .send-block select { width: 100%; padding: 8px; border: 1px solid #ff9800; border-radius: 4px; font-size: 13px; background: white; margin-bottom: 8px; }
-        .send-status { font-size: 12px; color: #666; margin-top: 8px; min-height: 16px; }
-        #alertBanner { display: none; background: #fee4e2; color: #b42318; padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; text-align: center; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#4CAF50">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Сканер чеков">
+<title>Сканер чеков ФНС</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 12px; }
+.container { background: white; border-radius: 18px; padding: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); max-width: 600px; margin: 0 auto; }
+h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
+
+.status-bar { background: #e3f2fd; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; color: #1565c0; text-align: center; line-height: 1.5; }
+.alert-banner { display: none; background: #fee4e2; color: #b42318; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; text-align: center; }
+
+.video-container { position: relative; width: 100%; border-radius: 12px; overflow: hidden; background: #000; margin-bottom: 12px; display: none; }
+.video-container.active { display: block; }
+#video { width: 100%; display: block; }
+.scan-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 250px; height: 250px; border: 3px solid #4CAF50; border-radius: 12px; pointer-events: none; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); }
+.scan-line { position: absolute; width: 100%; height: 3px; background: #4CAF50; animation: scan 2s linear infinite; box-shadow: 0 0 10px #4CAF50; }
+@keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+
+.button { display: block; width: 100%; padding: 16px; margin: 8px 0; font-size: 16px; font-weight: bold; border: none; border-radius: 12px; cursor: pointer; transition: all 0.2s; }
+.button:active { transform: scale(0.98); }
+.button:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-scan { background: #4CAF50; color: white; font-size: 18px; padding: 20px; }
+.btn-scan.scanning { background: #ff9800; }
+.btn-send { background: #FF7F3F; color: white; font-size: 18px; padding: 20px; }
+.btn-send:disabled { background: #ccc; }
+.btn-secondary { background: #2196F3; color: white; }
+.btn-sm { padding: 10px; font-size: 14px; margin: 6px 0; }
+
+.receipts-summary { display: flex; justify-content: space-between; align-items: center; padding: 12px 10px; background: #f5f5f5; border-radius: 10px; margin-top: 12px; cursor: pointer; user-select: none; }
+.receipts-summary:active { background: #e8e8e8; }
+.receipts-summary .title { font-size: 14px; font-weight: bold; color: #333; }
+.receipts-summary .arrow { font-size: 18px; color: #666; transition: transform 0.2s; }
+.receipts-summary.expanded .arrow { transform: rotate(90deg); }
+
+.receipts-list { margin-top: 8px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+.receipts-list.expanded { max-height: 6000px; }
+
+.receipt-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; margin: 6px 0; background: #f8f9fa; border-left: 4px solid #4CAF50; border-radius: 6px; cursor: pointer; font-size: 14px; gap: 8px; }
+.receipt-row:active { background: #eef1f3; }
+.receipt-row.pending { border-left-color: #ff9800; }
+.receipt-row.sent { border-left-color: #2196F3; }
+.receipt-row .date { color: #333; font-weight: 500; white-space: nowrap; }
+.receipt-row .sum { color: #111; font-weight: 700; white-space: nowrap; }
+.receipt-row .badge { font-size: 12px; white-space: nowrap; }
+
+.receipt-detail { background: #f8f9fa; border-left: 4px solid #4CAF50; border-radius: 6px; padding: 12px; margin: 6px 0; font-size: 13px; }
+.receipt-detail .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: bold; }
+.receipt-detail .btn-delete { background: #f44336; color: white; border: none; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; cursor: pointer; flex-shrink: 0; }
+.receipt-detail .info { color: #555; margin-bottom: 4px; word-break: break-word; }
+.receipt-detail .items { background: white; padding: 8px; border-radius: 4px; margin-top: 6px; }
+.receipt-detail .item-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee; font-size: 12px; }
+.receipt-detail .item-row:last-child { border-bottom: none; }
+.receipt-detail .cat-select { width: 100%; padding: 6px; border: 1px solid #ff9800; border-radius: 4px; font-size: 12px; margin-top: 8px; }
+
+.empty-state { text-align: center; padding: 24px 12px; color: #999; font-style: italic; font-size: 13px; }
+
+.bottom-buttons { display: flex; gap: 8px; margin-top: 12px; }
+.bottom-buttons .button { flex: 1; margin: 0; }
+
+.stats-small { text-align: center; padding: 12px 0; font-size: 13px; color: #666; margin-top: 8px; }
+.stats-small b { color: #333; }
+
+.footer { text-align: center; margin-top: 16px; color: rgba(255,255,255,0.8); font-size: 11px; }
+
+/* Модальные окна */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 12px; }
+.modal-overlay.active { display: flex; }
+.modal { background: white; border-radius: 16px; width: 100%; max-width: 600px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+.modal-header { padding: 14px 16px; background: #667eea; color: white; font-size: 18px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+.modal-header .close { background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; font-size: 20px; cursor: pointer; }
+.modal-body { padding: 14px 16px; overflow-y: auto; flex: 1; }
+.modal-footer { padding: 12px 16px; border-top: 1px solid #eee; display: flex; gap: 8px; }
+.modal-footer .button { flex: 1; margin: 0; }
+
+/* Лог */
+.log-modal-body { background: #1e1e1e; font-family: 'Courier New', monospace; font-size: 14px; padding: 12px; }
+.log-entry { padding: 8px 10px; margin: 6px 0; border-radius: 6px; line-height: 1.4; word-break: break-word; }
+.log-info { background: #2d2d2d; color: #d4d4d4; border-left: 3px solid #2196F3; }
+.log-success { background: #1e3a1e; color: #6ee06e; border-left: 3px solid #4CAF50; }
+.log-error { background: #3a1e1e; color: #ff8080; border-left: 3px solid #f44336; }
+.log-empty { color: #999; text-align: center; padding: 30px; font-size: 13px; }
+
+/* Настройки */
+.settings-group { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #eee; }
+.settings-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.settings-group label { font-size: 13px; font-weight: bold; color: #333; display: block; margin-bottom: 6px; }
+.settings-group select, .settings-group textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+.settings-group textarea { font-family: monospace; font-size: 12px; resize: vertical; min-height: 70px; }
+.settings-group .hint { font-size: 11px; color: #888; margin-top: 4px; }
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>🛒 Сканер чеков ФНС</h1>
+<div class="container">
+  <h1>🛒 Сканер чеков ФНС</h1>
 
-        <div class="cache-info" id="cacheInfo">💾 Загрузка…</div>
-        <div id="alertBanner"></div>
+  <div class="status-bar" id="statusBar">💾 Загрузка…</div>
+  <div class="alert-banner" id="alertBanner"></div>
 
-        <div class="video-container">
-            <video id="video" playsinline></video>
-            <div class="scan-overlay"><div class="scan-line"></div></div>
-        </div>
+  <div class="video-container" id="videoContainer">
+    <video id="video" playsinline></video>
+    <div class="scan-overlay"><div class="scan-line"></div></div>
+  </div>
 
-        <button class="button btn-scan" id="scanBtn" onclick="toggleScan()">📷 Начать сканирование</button>
-        <button class="button btn-excel" onclick="exportToExcel()">📊 Экспорт в Excel (CSV)</button>
-        <button class="button btn-1c" onclick="exportTo1C()">💼 Экспорт для 1С (TXT)</button>
+  <button class="button btn-scan" id="scanBtn" onclick="toggleScan()">📷 Начать сканирование</button>
+  <button class="button btn-send" id="sendBtn" onclick="sendTo1C(false, false)">📤 Отправить в 1С</button>
 
-        <div class="send-block">
-            <label>📤 Отправка на NAS (1С)</label>
-            <select id="senderUser">
-                <option value="lambert">lambert</option>
-                <option value="mama">mama</option>
-                <option value="papa">papa</option>
-            </select>
-            <button class="button btn-send" onclick="sendTo1C(false, false)">📤 Отправить новые в 1С</button>
-            <button class="button btn-retry" id="btnRetry" onclick="retryPending(true)">🔄 Проверить отложенные</button>
-            <button class="button btn-resend" onclick="sendTo1C(true, false)">🔁 Отправить ВСЕ повторно</button>
-            <div class="send-status" id="sendStatus"></div>
-        </div>
+  <div class="receipts-summary" id="receiptsSummary" onclick="toggleReceiptsList()">
+    <span class="title" id="receiptsTitle">📂 Последние чеки</span>
+    <span class="arrow">▸</span>
+  </div>
+  <div class="receipts-list" id="receiptsList">
+    <div class="empty-state">Нет сохранённых чеков<br>Отсканируйте первый чек!</div>
+  </div>
 
-        <button class="button btn-clear" onclick="clearCodes()">🗑️ Очистить все</button>
+  <div class="bottom-buttons">
+    <button class="button btn-sm btn-secondary" onclick="openSettings()">⚙️ Настройки</button>
+    <button class="button btn-sm btn-secondary" onclick="openLog()">📜 Лог</button>
+  </div>
 
-        <div class="category-selector" style="margin-top:15px; background:#e8f5e9; border-left-color:#4CAF50;">
-            <label style="color:#1b5e20;">⌨️ Нет чека под рукой? Вставьте строку (t=...&s=...&fn=...):</label>
-            <textarea id="manualQR" rows="3" placeholder="t=20260318T112100&s=401.77&fn=...&i=...&fp=...&n=1" style="width:100%;padding:8px;border:1px solid #4CAF50;border-radius:4px;font-size:12px;font-family:monospace;margin-top:5px;"></textarea>
-            <button class="button" style="background:#3F51B5;color:white;margin-top:8px;" onclick="addManual()">➕ Добавить чек по строке</button>
-        </div>
+  <div class="stats-small" id="statsSmall"></div>
+</div>
 
-        <div class="stats">📊 Сохранено чеков: <span id="count">0</span></div>
+<div class="footer">v15.2 | Офлайн-скан + авто-дозапрос + авто-отправка в 1С</div>
 
-        <div class="codes-container" id="codes-list">
-            <div class="empty-state">Нет сохраненных чеков<br>Отсканируйте первый чек!</div>
-        </div>
-
-        <div class="log-container" id="logContainer">
-            <div style="color: #999; text-align: center;">Лог пуст</div>
-        </div>
-        <button class="btn-clear-log" onclick="clearLog()">🗑️ Очистить лог</button>
+<!-- Модальное окно: ЛОГ -->
+<div class="modal-overlay" id="logModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span>📜 Лог</span>
+      <button class="close" onclick="closeLog()">×</button>
     </div>
+    <div class="modal-body log-modal-body" id="logContainer">
+      <div class="log-empty">Лог пуст</div>
+    </div>
+    <div class="modal-footer">
+      <button class="button btn-sm" style="background:#666;color:white;" onclick="copyLog()">📋 Скопировать</button>
+      <button class="button btn-sm" style="background:#f44336;color:white;" onclick="clearLog()">🗑️ Очистить</button>
+    </div>
+  </div>
+</div>
 
-    <div class="footer">v15.1 | Офлайн-скан + авто-дозапрос + авто-отправка в 1С</div>
+<!-- Модальное окно: НАСТРОЙКИ -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span>⚙️ Настройки</span>
+      <button class="close" onclick="closeSettings()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="settings-group">
+        <label>👤 Кто сканирует</label>
+        <select id="senderUser">
+          <option value="lambert">lambert</option>
+          <option value="mama">mama</option>
+          <option value="papa">papa</option>
+        </select>
+        <div class="hint">Файл уйдёт в папку 1-inbox/&lt;имя&gt;/ на NAS</div>
+      </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-    <script>
-        // =====================================================================
-        // КОНФИГ
-        // =====================================================================
-        const API_TOKEN = "53441.ZLqLc0Gvo8gziNZXF";
+      <div class="settings-group">
+        <label>⌨️ Вставить строку чека вручную</label>
+        <textarea id="manualQR" placeholder="t=20260318T112100&s=401.77&fn=...&i=...&fp=...&n=1"></textarea>
+        <button class="button btn-sm" style="background:#3F51B5;color:white;margin-top:8px;" onclick="addManual()">➕ Добавить чек</button>
+        <div class="hint">Для случаев, когда QR не читается камерой</div>
+      </div>
 
-        // ВАЖНО: URL Flask-приёмника. Должен быть HTTPS.
-        // Заполним, когда поднимем Flask+Tailscale. Пока — заглушка.
-        const SENDER_URL = 'https://synology-flat11.taila10dc4.ts.net:8443/upload';
+      <div class="settings-group">
+        <label>🔄 Синхронизация</label>
+        <button class="button btn-sm btn-secondary" onclick="retryPending(true)">Проверить отложенные</button>
+        <button class="button btn-sm btn-secondary" onclick="sendTo1C(true, false)">Отправить ВСЕ повторно</button>
+      </div>
 
-        const DAILY_API_LIMIT = 15;
-        const AUTO_RETRY_MINUTES = 2;
+      <div class="settings-group">
+        <label>💼 Экспорт файла (резерв)</label>
+        <button class="button btn-sm btn-secondary" onclick="exportTo1C()">Экспорт для 1С (TXT)</button>
+        <div class="hint">Если отправка на NAS недоступна</div>
+      </div>
 
-        const CATEGORIES = [
-            { id: "uncategorized", name: "Без категории" },
-            { id: "products", name: "Продукты" },
-            { id: "construction", name: "Стройматериалы" },
-            { id: "fuel", name: "Авто: топливо" },
-            { id: "pharmacy", name: "Медицина / Аптека" },
-            { id: "household", name: "Бытовая химия" },
-            { id: "clothes", name: "Одежда" },
-            { id: "electronics", name: "Техника" },
-            { id: "services", name: "Услуги" }
-        ];
+      <div class="settings-group">
+        <label>🔧 Диагностика</label>
+        <div id="diagInfo" style="font-size:12px;color:#666;line-height:1.6;"></div>
+      </div>
 
-        let isProcessing = false;
-        let lastScanTime = 0;
-        const SCAN_COOLDOWN = 3000;
+      <div class="settings-group">
+        <label>🗑️ Опасные действия</label>
+        <button class="button btn-sm" style="background:#f44336;color:white;" onclick="clearCodes()">Удалить все чеки и кэш</button>
+      </div>
+    </div>
+  </div>
+</div>
 
-        let video = document.getElementById('video');
-        let canvas = document.createElement('canvas');
-        let context = canvas.getContext('2d');
-        let scanning = false;
-        let scanTimeout = null;
-        let stream = null;
-        let autoRetryIntervalId = null;
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+// =====================================================================
+// КОНФИГ
+// =====================================================================
+const API_TOKEN = "53441.ZLqLc0Gvo8gziNZXF";
+const DAILY_API_LIMIT = 15;
+const AUTO_RETRY_MINUTES = 2;
+const RECENT_COUNT = 5;
+const LOCAL_TIMEOUT_MS = 3000;
 
-        // =====================================================================
-        // ХРАНИЛИЩЕ
-        // =====================================================================
-        function getReceipts() { return JSON.parse(localStorage.getItem('receipts') || '[]'); }
-        function setReceipts(a) { localStorage.setItem('receipts', JSON.stringify(a)); }
-        function getCache() { return JSON.parse(localStorage.getItem('receipts_cache') || '{}'); }
-        function setCache(o) { localStorage.setItem('receipts_cache', JSON.stringify(o)); }
+// v15.2: dual-URL. Первый — локальный, второй — Tailscale.
+// Пробуем по очереди; используем тот, что ответил.
+const SENDER_URLS = [
+  'https://192.168.10.22:8443/upload',
+  'https://synology-flat11.taila10dc4.ts.net:8443/upload'
+];
 
-        // =====================================================================
-        // СТАРТ
-        // =====================================================================
-        window.onload = function () {
-            loadSavedCodes();
-            updateCacheInfo();
-            addLog('✅ Сканер готов к работе', 'success');
-            registerSW();
-            if (navigator.onLine) {
-                addLog('🌐 Онлайн: автопроверка через 2 сек', 'info');
-                setTimeout(autoSync, 2000);
-            } else {
-                addLog('📴 Офлайн: чеки сохранятся, синхронизация дома', 'info');
-            }
-            startAutoRetryTimer();
-        };
+const CATEGORIES = [
+  { id: "uncategorized", name: "Без категории" },
+  { id: "products", name: "Продукты" },
+  { id: "construction", name: "Стройматериалы" },
+  { id: "fuel", name: "Авто: топливо" },
+  { id: "pharmacy", name: "Медицина / Аптека" },
+  { id: "household", name: "Бытовая химия" },
+  { id: "clothes", name: "Одежда" },
+  { id: "electronics", name: "Техника" },
+  { id: "services", name: "Услуги" }
+];
 
-        window.addEventListener('online', () => {
-            addLog('🌐 Сеть появилась, запускаю автосинк', 'success');
-            setTimeout(autoSync, 1500);
+let isProcessing = false;
+let lastScanTime = 0;
+const SCAN_COOLDOWN = 3000;
+let video = document.getElementById('video');
+let canvas = document.createElement('canvas');
+let context = canvas.getContext('2d');
+let scanning = false;
+let scanTimeout = null;
+let stream = null;
+let autoRetryIntervalId = null;
+let listExpanded = false;
+let expandedIndex = null;
+
+// =====================================================================
+// ХРАНИЛИЩЕ
+// =====================================================================
+function getReceipts() { return JSON.parse(localStorage.getItem('receipts') || '[]'); }
+function setReceipts(a) { localStorage.setItem('receipts', JSON.stringify(a)); }
+function getCache() { return JSON.parse(localStorage.getItem('receipts_cache') || '{}'); }
+function setCache(o) { localStorage.setItem('receipts_cache', JSON.stringify(o)); }
+
+// =====================================================================
+// СТАРТ
+// =====================================================================
+window.onload = function () {
+  loadSavedCodes();
+  updateCacheInfo();
+  addLog('✅ Сканер готов (v15.2)', 'success');
+  registerSW();
+  if (navigator.onLine) {
+    addLog('🌐 Онлайн: автопроверка через 2 сек', 'info');
+    setTimeout(autoSync, 2000);
+  } else {
+    addLog('📴 Офлайн: чеки сохранятся, синхронизация дома', 'info');
+  }
+  startAutoRetryTimer();
+};
+
+window.addEventListener('online', () => {
+  addLog('🌐 Сеть появилась, автосинк', 'success');
+  setTimeout(autoSync, 1500);
+});
+
+async function autoSync() {
+  try {
+    await retryPending(false);
+    await sendTo1C(false, true);
+  } catch (e) {
+    addLog('❌ Автосинк: ' + e.message, 'error');
+  }
+}
+
+function startAutoRetryTimer() {
+  if (autoRetryIntervalId) return;
+  autoRetryIntervalId = setInterval(() => {
+    if (!navigator.onLine) return;
+    const receipts = getReceipts();
+    const unsent = receipts.filter(r => r.status === 'ok' && !r.sent).length;
+    const pending = receipts.filter(r => r.status === 'pending').length;
+    if (unsent > 0 || pending > 0) autoSync();
+  }, AUTO_RETRY_MINUTES * 60000);
+}
+
+function registerSW() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW fail:', err));
+  }
+}
+
+// =====================================================================
+// КАМЕРА
+// =====================================================================
+function toggleScan() { scanning ? stopScan() : startScan(); }
+
+function startScan() {
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+    .then(function (mediaStream) {
+      stream = mediaStream;
+      video.srcObject = stream;
+      video.play();
+      scanning = true;
+      const btn = document.getElementById('scanBtn');
+      btn.textContent = '⏹️ Остановить камеру';
+      btn.classList.add('scanning');
+      document.getElementById('videoContainer').classList.add('active');
+      addLog('📡 Камера запущена', 'info');
+      requestAnimationFrame(tick);
+    })
+    .catch(function (err) { addLog('❌ Ошибка камеры: ' + err.message, 'error'); });
+}
+
+function stopScan() { stopCamera(); }
+
+function stopCamera() {
+  scanning = false;
+  if (stream) { stream.getTracks().forEach(track => track.stop()); stream = null; }
+  if (scanTimeout) { clearTimeout(scanTimeout); scanTimeout = null; }
+  const btn = document.getElementById('scanBtn');
+  btn.textContent = '📷 Начать сканирование';
+  btn.classList.remove('scanning');
+  document.getElementById('videoContainer').classList.remove('active');
+}
+
+function tick() {
+  if (!scanning) return;
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.height = video.videoHeight;
+    canvas.width = video.videoWidth;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    let imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    let code = jsQR(imageData.data, imageData.width, imageData.height);
+    if (code) { handleScan(code.data); return; }
+  }
+  requestAnimationFrame(tick);
+}
+
+// =====================================================================
+// РАСПОЗНАВАНИЕ (офлайн-first)
+// =====================================================================
+async function handleScan(qrData) {
+  if (isProcessing) return;
+  const now = Date.now();
+  if (now - lastScanTime < SCAN_COOLDOWN) return;
+  lastScanTime = now;
+
+  let receipts = getReceipts();
+  if (receipts.some(r => r.qr === qrData)) {
+    addLog('⚠️ Чек уже сохранён', 'error');
+    stopCamera();
+    return;
+  }
+
+  let cache = getCache();
+  if (cache[qrData]) {
+    addLog('✅ Чек взят из кэша', 'success');
+    receipts.push(cache[qrData]);
+    setReceipts(receipts);
+    loadSavedCodes();
+    updateCacheInfo();
+    stopCamera();
+    return;
+  }
+
+  const pendingReceipt = {
+    qr: qrData,
+    date: parseQRDate(qrData),
+    total: parseQRSum(qrData),
+    shop: '', inn: '', address: '',
+    checkNumber: '', shiftNumber: '', cashier: '',
+    operationType: '1',
+    category: 'uncategorized',
+    cashTotalSum: 0, ecashTotalSum: 0,
+    paymentMethod: 'unknown',
+    items: [], timestamp: Date.now(),
+    status: 'pending'
+  };
+  receipts.push(pendingReceipt);
+  setReceipts(receipts);
+  loadSavedCodes();
+  updateCacheInfo();
+  if (navigator.vibrate) navigator.vibrate(100);
+
+  if (!navigator.onLine) {
+    addLog('⏳ Офлайн: сохранено, проверю дома', 'info');
+    stopCamera();
+    return;
+  }
+
+  const today = new Date().toDateString();
+  let dailyStats = JSON.parse(localStorage.getItem('daily_stats') || '{}');
+  if (!dailyStats[today]) dailyStats[today] = 0;
+  if (dailyStats[today] >= DAILY_API_LIMIT) {
+    addLog('⚠️ Лимит API исчерпан, проверится завтра', 'error');
+    stopCamera();
+    return;
+  }
+
+  isProcessing = true;
+  addLog('🔄 Запрос к API...', 'info');
+  try {
+    const formData = new URLSearchParams();
+    formData.append('qrraw', qrData);
+    formData.append('token', API_TOKEN);
+    const response = await fetch('https://proverkacheka.com/api/v1/check/get', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData
+    });
+    const data = await response.json();
+    if (data.code === 1) {
+      dailyStats[today] = (dailyStats[today] || 0) + 1;
+      localStorage.setItem('daily_stats', JSON.stringify(dailyStats));
+      const upgraded = upgradeReceiptFromAPI(qrData, data);
+      if (upgraded) {
+        if (navigator.vibrate) navigator.vibrate(200);
+        addLog('✅ Чек расшифрован: ' + upgraded.items.length + ' тов.', 'success');
+      }
+    } else {
+      addLog('⚠️ Ошибка API (code=' + data.code + ')', 'error');
+    }
+  } catch (error) {
+    addLog('❌ Сеть: ' + error.message + ' — остался pending', 'error');
+  } finally {
+    isProcessing = false;
+  }
+  stopCamera();
+}
+
+// =====================================================================
+// PENDING → OK
+// =====================================================================
+function upgradeReceiptFromAPI(qrData, apiResponse) {
+  const json = apiResponse.data.json;
+  let receipts = getReceipts();
+  const idx = receipts.findIndex(r => r.qr === qrData);
+  if (idx < 0) return null;
+  const address = String(json.retailPlaceAddres || json.retailPlaceAddress || json.address || '');
+  receipts[idx].date = json.ticketDate || receipts[idx].date;
+  receipts[idx].total = json.totalSum ? (parseFloat(json.totalSum) / 100).toFixed(2) : receipts[idx].total;
+  receipts[idx].shop = String(json.user || '');
+  receipts[idx].inn = String(json.userInn || '');
+  receipts[idx].address = address;
+  receipts[idx].checkNumber = String(json.requestNumber || '');
+  receipts[idx].shiftNumber = String(json.shiftNumber || '');
+  receipts[idx].cashier = String(json.operator || '');
+  receipts[idx].cashTotalSum = json.cashTotalSum ? parseFloat(json.cashTotalSum) / 100 : 0;
+  receipts[idx].ecashTotalSum = json.ecashTotalSum ? parseFloat(json.ecashTotalSum) / 100 : 0;
+  receipts[idx].paymentMethod = determinePaymentMethod(json.cashTotalSum, json.ecashTotalSum);
+  receipts[idx].items = (json.items || []).map(item => ({
+    name: String(item.name || 'Товар'),
+    quantity: item.quantity || 1,
+    price: item.price ? (parseFloat(item.price) / 100).toFixed(2) : '0.00',
+    sum: item.sum ? (parseFloat(item.sum) / 100).toFixed(2) : '0.00'
+  }));
+  receipts[idx].status = 'ok';
+  setReceipts(receipts);
+  let cache = getCache();
+  cache[qrData] = receipts[idx];
+  setCache(cache);
+  loadSavedCodes();
+  updateCacheInfo();
+  return receipts[idx];
+}
+
+async function retryPending(showAlert) {
+  let receipts = getReceipts();
+  const pending = receipts.filter(r => r.status === 'pending');
+  if (pending.length === 0) {
+    if (showAlert) alert('✅ Отложенных чеков нет');
+    return { upgraded: 0, errors: 0, remaining: 0 };
+  }
+  if (!navigator.onLine) {
+    if (showAlert) alert('📴 Нет сети. Подключись к Wi-Fi и повтори.');
+    return { upgraded: 0, errors: 0, remaining: pending.length };
+  }
+  const today = new Date().toDateString();
+  let dailyStats = JSON.parse(localStorage.getItem('daily_stats') || '{}');
+  let todayCount = dailyStats[today] || 0;
+
+  let upgraded = 0, errors = 0, limitReached = false;
+  addLog('🔄 Проверка отложенных: ' + pending.length, 'info');
+
+  for (const p of pending) {
+    if (todayCount >= DAILY_API_LIMIT) { limitReached = true; break; }
+    try {
+      const formData = new URLSearchParams();
+      formData.append('qrraw', p.qr);
+      formData.append('token', API_TOKEN);
+      const resp = await fetch('https://proverkacheka.com/api/v1/check/get', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData
+      });
+      const data = await resp.json();
+      todayCount++;
+      dailyStats[today] = todayCount;
+      localStorage.setItem('daily_stats', JSON.stringify(dailyStats));
+      if (data.code === 1) { upgradeReceiptFromAPI(p.qr, data); upgraded++; }
+      else { errors++; }
+    } catch (err) {
+      addLog('❌ Сеть пропала на ' + upgraded + '/' + pending.length, 'error');
+      break;
+    }
+  }
+  const remaining = getReceipts().filter(r => r.status === 'pending').length;
+  addLog('🔄 +' + upgraded + ' расшифровано, ошибок ' + errors, 'info');
+  updateCacheInfo();
+  if (showAlert) {
+    alert('🔄 Проверка завершена\n✅ Расшифровано: ' + upgraded + '\n❌ Ошибок: ' + errors
+      + (limitReached ? '\n⚠️ Лимит API исчерпан, остальные — завтра' : '')
+      + '\n\nОсталось отложенных: ' + remaining);
+  }
+  return { upgraded, errors, remaining, limitReached };
+}
+
+// =====================================================================
+// ОТПРАВКА НА NAS (dual URL с fallback)
+// =====================================================================
+function build1CText(receipts) {
+  let txtContent = '#1C:UNF\n';
+  txtContent += '#Version:1.0\n';
+  txtContent += '#Encoding:UTF-8\n';
+  txtContent += '#Separator:;\n';
+  txtContent += '#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,QRString\n\n';
+  receipts.forEach(function (receipt) {
+    const date = String(receipt.date || '');
+    const total = String(receipt.total || '0.00');
+    const shop = String(receipt.shop || '').replace(/;/g, ',');
+    const inn = String(receipt.inn || '').replace(/;/g, ',');
+    const address = String(receipt.address || '').replace(/;/g, ',');
+    const checkNum = String(receipt.checkNumber || '').replace(/;/g, ',');
+    const shiftNum = String(receipt.shiftNumber || '').replace(/;/g, ',');
+    const cashier = String(receipt.cashier || '').replace(/;/g, ',');
+    const category = getCategoryName(receipt.category || 'uncategorized');
+    const paymentMethod = String(receipt.paymentMethod || 'unknown');
+    const qr = String(receipt.qr || '').replace(/;/g, ',').replace(/"/g, '""');
+    if (receipt.items && receipt.items.length > 0) {
+      receipt.items.forEach(function (item) {
+        const name = String(item.name || 'Товар').replace(/;/g, ',').replace(/"/g, '""');
+        const qty = String(item.quantity || 1);
+        const price = String(item.price || '0.00');
+        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';"' + name + '";' + qty + ';' + price + ';' + qr + '\n';
+      });
+    } else {
+      txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';"Без детализации";1;' + total + ';' + qr + '\n';
+    }
+  });
+  return txtContent;
+}
+
+async function tryPost(url, txt, filename, user) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LOCAL_TIMEOUT_MS);
+  try {
+    const fd = new FormData();
+    fd.append('user', user);
+    fd.append('file', new Blob([txt], { type: 'text/plain;charset=utf-8' }), filename);
+    const resp = await fetch(url, { method: 'POST', body: fd, signal: controller.signal });
+    clearTimeout(timeout);
+    return resp;
+  } catch (e) {
+    clearTimeout(timeout);
+    throw e;
+  }
+}
+
+async function sendTo1C(includeSent, silent) {
+  let receipts = getReceipts();
+  const toSend = includeSent
+    ? receipts.filter(r => r.status === 'ok')
+    : receipts.filter(r => r.status === 'ok' && !r.sent);
+
+  if (toSend.length === 0) {
+    if (!silent) alert('✅ Нечего отправлять.\n\nЕсли есть отложенные — сначала «Проверить отложенные» в настройках.');
+    return;
+  }
+  if (!navigator.onLine) {
+    if (!silent) alert('📴 Нет сети.');
+    return;
+  }
+  const user = document.getElementById('senderUser').value;
+  const txt = build1CText(toSend);
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const filename = '1C_Чеки_' + dateStr + '_' + Date.now() + '.txt';
+
+  const sendBtn = document.getElementById('sendBtn');
+  sendBtn.disabled = true;
+  sendBtn.textContent = '⏳ Отправка ' + toSend.length + '...';
+
+  let usedUrl = null, lastErr = null;
+  for (const url of SENDER_URLS) {
+    try {
+      const resp = await tryPost(url, txt, filename, user);
+      if (resp.ok) { usedUrl = url; break; }
+      lastErr = new Error('HTTP ' + resp.status);
+    } catch (e) {
+      lastErr = e;
+      addLog('⚠️ ' + url + ' → ' + (e.message || e), 'info');
+    }
+  }
+
+  sendBtn.disabled = false;
+  sendBtn.textContent = '📤 Отправить в 1С';
+
+  if (!usedUrl) {
+    const msg = lastErr ? (lastErr.message || String(lastErr)) : 'все адреса недоступны';
+    addLog('❌ Ошибка отправки: ' + msg, 'error');
+    if (!silent) alert('❌ Не удалось отправить: ' + msg + '\n\nПроверь Wi-Fi / Tailscale.');
+    return;
+  }
+
+  const qrSet = new Set(toSend.map(r => r.qr));
+  receipts.forEach(r => { if (qrSet.has(r.qr)) r.sent = true; });
+  setReceipts(receipts);
+  const shortUrl = usedUrl.includes('192.168') ? 'локально' : 'Tailscale';
+  addLog('📤 Отправлено: ' + toSend.length + ' → ' + user + ' (' + shortUrl + ')', 'success');
+  loadSavedCodes();
+  updateCacheInfo();
+}
+
+// =====================================================================
+// ЭКСПОРТ TXT (резерв)
+// =====================================================================
+function exportTo1C() {
+  let receipts = getReceipts();
+  if (receipts.length === 0) { alert('❌ Нет сохранённых чеков!'); return; }
+  try {
+    const txtContent = build1CText(receipts);
+    const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = '1C_Чеки_' + dateStr + '.txt';
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    alert('✅ Файл ' + filename + ' скачан!');
+  } catch (error) {
+    alert('❌ Ошибка экспорта: ' + error.message);
+  }
+}
+
+// =====================================================================
+// СПИСОК ЧЕКОВ (компактный, раскрываемый)
+// =====================================================================
+function toggleReceiptsList() {
+  listExpanded = !listExpanded;
+  expandedIndex = null;
+  const list = document.getElementById('receiptsList');
+  const summary = document.getElementById('receiptsSummary');
+  list.classList.toggle('expanded', listExpanded);
+  summary.classList.toggle('expanded', listExpanded);
+  renderReceiptsList();
+}
+
+function toggleReceiptDetail(index) {
+  expandedIndex = (expandedIndex === index) ? null : index;
+  renderReceiptsList();
+}
+
+function renderReceiptsList() {
+  const receipts = getReceipts();
+  const list = document.getElementById('receiptsList');
+  const title = document.getElementById('receiptsTitle');
+
+  title.textContent = listExpanded
+    ? '📂 Все чеки (' + receipts.length + ')'
+    : '📂 Последние чеки';
+
+  if (receipts.length === 0) {
+    list.innerHTML = '<div class="empty-state">Нет сохранённых чеков<br>Отсканируйте первый чек!</div>';
+    return;
+  }
+
+  const displayList = listExpanded ? receipts.slice().reverse() : receipts.slice(-RECENT_COUNT).reverse();
+  list.innerHTML = '';
+
+  displayList.forEach((receipt) => {
+    const realIndex = receipts.indexOf(receipt);
+
+    if (expandedIndex === realIndex) {
+      // Развёрнутый вид
+      const div = document.createElement('div');
+      div.className = 'receipt-detail';
+      let html = '<div class="detail-header"><span>' + (receipt.date || '') + '</span>';
+      html += '<button class="btn-delete" onclick="event.stopPropagation();deleteReceipt(' + realIndex + ')">✕</button></div>';
+      let badges = '';
+      if (receipt.sent) badges += ' <span style="color:#4CAF50;font-size:12px;">✅ отправлен</span>';
+      if (receipt.status === 'pending') badges += ' <span style="color:#ff9800;font-size:12px;">⏳ ждёт проверки</span>';
+      html += '<div style="font-size:16px;font-weight:bold;margin-bottom:6px;">💰 ' + receipt.total + ' ₽' + badges + '</div>';
+      if (receipt.shop) html += '<div class="info">🏪 ' + receipt.shop + '</div>';
+      if (receipt.inn) html += '<div class="info">📋 ИНН: ' + receipt.inn + '</div>';
+      if (receipt.address) html += '<div class="info">📍 ' + receipt.address + '</div>';
+      if (receipt.checkNumber) html += '<div class="info">🧾 Чек № ' + receipt.checkNumber + '</div>';
+      if (receipt.cashier) html += '<div class="info">👤 ' + receipt.cashier + '</div>';
+      if (receipt.paymentMethod) {
+        html += '<div class="info">💰 ' + getPaymentMethodName(receipt.paymentMethod);
+        if (receipt.cashTotalSum > 0) html += ' (нал: ' + receipt.cashTotalSum.toFixed(2) + ')';
+        if (receipt.ecashTotalSum > 0) html += ' (карта: ' + receipt.ecashTotalSum.toFixed(2) + ')';
+        html += '</div>';
+      }
+      html += '<select class="cat-select" onchange="updateCategory(' + realIndex + ', this.value)">';
+      CATEGORIES.forEach(cat => {
+        const selected = receipt.category === cat.id ? 'selected' : '';
+        html += '<option value="' + cat.id + '" ' + selected + '>' + cat.name + '</option>';
+      });
+      html += '</select>';
+      if (receipt.items && receipt.items.length > 0) {
+        html += '<div class="items">';
+        receipt.items.forEach(item => {
+          html += '<div class="item-row"><span>' + item.name + '</span><span>' + item.quantity + ' шт.</span><span style="font-weight:600;color:#4CAF50;">' + item.sum + ' ₽</span></div>';
         });
+        html += '</div>';
+      } else if (receipt.status === 'pending') {
+        html += '<div style="font-size:12px;color:#ff9800;margin-top:6px;">⏳ Состав появится после проверки API</div>';
+      }
+      html += '<div style="font-family:monospace;font-size:10px;color:#888;background:#eee;padding:6px;border-radius:4px;margin-top:8px;word-break:break-all;">' + receipt.qr + '</div>';
+      div.innerHTML = html;
+      div.onclick = (e) => { if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON') toggleReceiptDetail(realIndex); };
+      list.appendChild(div);
+    } else {
+      // Компактный вид
+      const div = document.createElement('div');
+      div.className = 'receipt-row';
+      if (receipt.status === 'pending') div.classList.add('pending');
+      if (receipt.sent) div.classList.add('sent');
+      let badge = '';
+      if (receipt.sent) badge = '<span class="badge" style="color:#4CAF50;">✅</span>';
+      else if (receipt.status === 'pending') badge = '<span class="badge" style="color:#ff9800;">⏳</span>';
+      div.innerHTML = '<span class="date">' + shortDate(receipt.date) + '</span>'
+        + '<span class="sum">' + receipt.total + ' ₽</span>'
+        + badge;
+      div.onclick = () => toggleReceiptDetail(realIndex);
+      list.appendChild(div);
+    }
+  });
+}
 
-        async function autoSync() {
-            try {
-                await retryPending(false);
-                await sendTo1C(false, true);
-            } catch (e) {
-                addLog('❌ Автосинк: ' + e.message, 'error');
-            }
-        }
+function shortDate(d) {
+  if (!d) return '??';
+  const parts = String(d).split(' ');
+  const datePart = parts[0] || d;
+  return datePart.length > 8 ? datePart.substring(0, 8) : datePart;
+}
 
-        function startAutoRetryTimer() {
-            if (autoRetryIntervalId) return;
-            autoRetryIntervalId = setInterval(() => {
-                if (!navigator.onLine) return;
-                const receipts = getReceipts();
-                const unsent = receipts.filter(r => r.status === 'ok' && !r.sent).length;
-                const pending = receipts.filter(r => r.status === 'pending').length;
-                if (unsent > 0 || pending > 0) {
-                    autoSync();
-                }
-            }, AUTO_RETRY_MINUTES * 60000);
-        }
+function loadSavedCodes() { renderReceiptsList(); }
 
-        function registerSW() {
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('sw.js').catch(err => {
-                    console.log('SW registration failed:', err);
-                });
-            }
-        }
+function deleteReceipt(index) {
+  let receipts = getReceipts();
+  if (index >= 0 && index < receipts.length) {
+    const deleted = receipts.splice(index, 1)[0];
+    setReceipts(receipts);
+    let cache = getCache();
+    delete cache[deleted.qr];
+    setCache(cache);
+    expandedIndex = null;
+    addLog('🗑️ Чек удалён', 'success');
+    loadSavedCodes();
+    updateCacheInfo();
+  }
+}
 
-        // =====================================================================
-        // КАМЕРА
-        // =====================================================================
-        function toggleScan() { scanning ? stopScan() : startScan(); }
+function updateCategory(index, categoryId) {
+  let receipts = getReceipts();
+  if (index >= 0 && index < receipts.length) {
+    receipts[index].category = categoryId;
+    setReceipts(receipts);
+    let cache = getCache();
+    if (cache[receipts[index].qr]) {
+      cache[receipts[index].qr].category = categoryId;
+      setCache(cache);
+    }
+    addLog('✅ Категория: ' + getCategoryName(categoryId), 'success');
+  }
+}
 
-        function startScan() {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-                .then(function (mediaStream) {
-                    stream = mediaStream;
-                    video.srcObject = stream;
-                    video.play();
-                    scanning = true;
-                    const btn = document.getElementById('scanBtn');
-                    btn.textContent = '⏹️ Остановить камеру';
-                    btn.classList.add('scanning');
-                    addLog('📡 Камера запущена', 'info');
-                    requestAnimationFrame(tick);
-                })
-                .catch(function (err) { addLog('❌ Ошибка камеры: ' + err.message, 'error'); });
-        }
+function getCategoryName(categoryId) {
+  const cat = CATEGORIES.find(c => c.id === categoryId);
+  return cat ? cat.name : 'Без категории';
+}
 
-        function stopScan() { stopCamera(); }
+// =====================================================================
+// СТАТУС И СЧЁТЧИКИ
+// =====================================================================
+function updateCacheInfo() {
+  const receipts = getReceipts();
+  const today = new Date().toDateString();
+  const dailyStats = JSON.parse(localStorage.getItem('daily_stats') || '{}');
+  const todayRequests = dailyStats[today] || 0;
+  const pendingCount = receipts.filter(r => r.status === 'pending').length;
+  const unsentCount = receipts.filter(r => r.status === 'ok' && !r.sent).length;
+  const sentCount = receipts.filter(r => r.sent).length;
 
-        function stopCamera() {
-            scanning = false;
-            if (stream) { stream.getTracks().forEach(track => track.stop()); stream = null; }
-            if (scanTimeout) { clearTimeout(scanTimeout); scanTimeout = null; }
-            const btn = document.getElementById('scanBtn');
-            btn.textContent = '📷 Начать сканирование';
-            btn.classList.remove('scanning');
-        }
+  document.getElementById('statusBar').innerHTML =
+    '📦 Всего: <b>' + receipts.length + '</b>' +
+    ' | ⏳ <b>' + pendingCount + '</b>' +
+    ' | 📤 <b>' + unsentCount + '</b>' +
+    ' | 🌐 API: <b>' + todayRequests + '/' + DAILY_API_LIMIT + '</b>';
 
-        function tick() {
-            if (!scanning) return;
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                canvas.height = video.videoHeight;
-                canvas.width = video.videoWidth;
-                context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                let imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-                let code = jsQR(imageData.data, imageData.width, imageData.height);
-                if (code) { handleScan(code.data); return; }
-            }
-            requestAnimationFrame(tick);
-        }
+  document.getElementById('statsSmall').innerHTML =
+    (navigator.onLine ? '🌐 Онлайн' : '📴 Офлайн') +
+    ' | ✅ Отправлено: <b>' + sentCount + '</b>';
 
-        // =====================================================================
-        // РАСПОЗНАВАНИЕ (офлайн-first)
-        // =====================================================================
-        async function handleScan(qrData) {
-            if (isProcessing) return;
-            const now = Date.now();
-            if (now - lastScanTime < SCAN_COOLDOWN) return;
-            lastScanTime = now;
+  const sendBtn = document.getElementById('sendBtn');
+  if (unsentCount > 0) {
+    sendBtn.textContent = '📤 Отправить в 1С (' + unsentCount + ')';
+    sendBtn.disabled = false;
+  } else {
+    sendBtn.textContent = '📤 Отправить в 1С';
+  }
 
-            let receipts = getReceipts();
-            if (receipts.some(r => r.qr === qrData)) {
-                addLog('⚠️ Чек уже сохранён', 'error');
-                stopCamera();
-                return;
-            }
+  const banner = document.getElementById('alertBanner');
+  if (unsentCount > 0 && navigator.onLine) {
+    banner.style.display = 'block';
+    banner.textContent = '⚠️ Не отправлено: ' + unsentCount + '. NAS недоступен? Проверю снова через ' + AUTO_RETRY_MINUTES + ' мин.';
+  } else {
+    banner.style.display = 'none';
+  }
 
-            let cache = getCache();
-            if (cache[qrData]) {
-                addLog('✅ Чек взят из кэша', 'success');
-                receipts.push(cache[qrData]);
-                setReceipts(receipts);
-                loadSavedCodes();
-                updateCacheInfo();
-                stopCamera();
-                return;
-            }
+  const diag = document.getElementById('diagInfo');
+  if (diag) {
+    diag.innerHTML = 'Адреса:<br>1. ' + SENDER_URLS[0] + '<br>2. ' + SENDER_URLS[1] +
+      '<br><br>Версия: v15.2<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
+  }
+}
 
-            // 1) Сначала всегда сохраняем pending
-            const pendingReceipt = {
-                qr: qrData,
-                date: parseQRDate(qrData),
-                total: parseQRSum(qrData),
-                shop: '', inn: '', address: '',
-                checkNumber: '', shiftNumber: '', cashier: '',
-                operationType: '1',
-                category: 'uncategorized',
-                cashTotalSum: 0,
-                ecashTotalSum: 0,
-                paymentMethod: 'unknown',
-                items: [],
-                timestamp: Date.now(),
-                status: 'pending'
-            };
-            receipts.push(pendingReceipt);
-            setReceipts(receipts);
-            loadSavedCodes();
-            updateCacheInfo();
-            if (navigator.vibrate) navigator.vibrate(100);
+// =====================================================================
+// ЛОГ (модальное окно)
+// =====================================================================
+let logEntries = [];
 
-            // 2) Офлайн — стоп
-            if (!navigator.onLine) {
-                addLog('⏳ Офлайн: сохранено, проверю дома', 'info');
-                stopCamera();
-                return;
-            }
+function addLog(message, type) {
+  const entry = {
+    time: new Date().toLocaleTimeString(),
+    message: message,
+    type: type
+  };
+  logEntries.push(entry);
+  if (logEntries.length > 200) logEntries.shift();
+  renderLog();
+}
 
-            // 3) Лимит API
-            const today = new Date().toDateString();
-            let dailyStats = JSON.parse(localStorage.getItem('daily_stats') || '{}');
-            if (!dailyStats[today]) dailyStats[today] = 0;
-            if (dailyStats[today] >= DAILY_API_LIMIT) {
-                addLog('⚠️ Лимит API (' + DAILY_API_LIMIT + ') исчерпан, проверится завтра', 'error');
-                stopCamera();
-                return;
-            }
+function renderLog() {
+  const container = document.getElementById('logContainer');
+  if (logEntries.length === 0) {
+    container.innerHTML = '<div class="log-empty">Лог пуст</div>';
+    return;
+  }
+  container.innerHTML = '';
+  // Свежие — сверху
+  for (let i = logEntries.length - 1; i >= 0; i--) {
+    const e = logEntries[i];
+    const div = document.createElement('div');
+    div.className = 'log-entry log-' + e.type;
+    div.textContent = e.time + '  ' + e.message;
+    container.appendChild(div);
+  }
+}
 
-            // 4) Запрос API
-            isProcessing = true;
-            addLog('🔄 Запрос к API...', 'info');
-            try {
-                const formData = new URLSearchParams();
-                formData.append('qrraw', qrData);
-                formData.append('token', API_TOKEN);
-                const response = await fetch('https://proverkacheka.com/api/v1/check/get', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: formData
-                });
-                const data = await response.json();
-                if (data.code === 1) {
-                    dailyStats[today] = (dailyStats[today] || 0) + 1;
-                    localStorage.setItem('daily_stats', JSON.stringify(dailyStats));
-                    const upgraded = upgradeReceiptFromAPI(qrData, data);
-                    if (upgraded) {
-                        if (navigator.vibrate) navigator.vibrate(200);
-                        addLog('✅ Чек расшифрован: ' + upgraded.items.length + ' товаров', 'success');
-                    }
-                } else {
-                    addLog('⚠️ Ошибка API (code=' + data.code + ')', 'error');
-                }
-            } catch (error) {
-                addLog('❌ Сеть: ' + error.message + ' — осталось pending', 'error');
-            } finally {
-                isProcessing = false;
-            }
-            stopCamera();
-        }
+function openLog() {
+  document.getElementById('logModal').classList.add('active');
+  renderLog();
+}
 
-        // =====================================================================
-        // PENDING → OK
-        // =====================================================================
-        function upgradeReceiptFromAPI(qrData, apiResponse) {
-            const json = apiResponse.data.json;
-            let receipts = getReceipts();
-            const idx = receipts.findIndex(r => r.qr === qrData);
-            if (idx < 0) return null;
-            const address = String(json.retailPlaceAddres || json.retailPlaceAddress || json.address || '');
-            receipts[idx].date = json.ticketDate || receipts[idx].date;
-            receipts[idx].total = json.totalSum ? (parseFloat(json.totalSum) / 100).toFixed(2) : receipts[idx].total;
-            receipts[idx].shop = String(json.user || '');
-            receipts[idx].inn = String(json.userInn || '');
-            receipts[idx].address = address;
-            receipts[idx].checkNumber = String(json.requestNumber || '');
-            receipts[idx].shiftNumber = String(json.shiftNumber || '');
-            receipts[idx].cashier = String(json.operator || '');
-            receipts[idx].cashTotalSum = json.cashTotalSum ? parseFloat(json.cashTotalSum) / 100 : 0;
-            receipts[idx].ecashTotalSum = json.ecashTotalSum ? parseFloat(json.ecashTotalSum) / 100 : 0;
-            receipts[idx].paymentMethod = determinePaymentMethod(json.cashTotalSum, json.ecashTotalSum);
-            receipts[idx].items = (json.items || []).map(item => ({
-                name: String(item.name || 'Товар'),
-                quantity: item.quantity || 1,
-                price: item.price ? (parseFloat(item.price) / 100).toFixed(2) : '0.00',
-                sum: item.sum ? (parseFloat(item.sum) / 100).toFixed(2) : '0.00'
-            }));
-            receipts[idx].status = 'ok';
-            setReceipts(receipts);
-            let cache = getCache();
-            cache[qrData] = receipts[idx];
-            setCache(cache);
-            loadSavedCodes();
-            updateCacheInfo();
-            return receipts[idx];
-        }
+function closeLog() {
+  document.getElementById('logModal').classList.remove('active');
+}
 
-        async function retryPending(showAlert) {
-            let receipts = getReceipts();
-            const pending = receipts.filter(r => r.status === 'pending');
-            if (pending.length === 0) {
-                if (showAlert) alert('✅ Отложенных чеков нет');
-                return { upgraded: 0, errors: 0, remaining: 0 };
-            }
-            if (!navigator.onLine) {
-                if (showAlert) alert('📴 Нет сети. Подключись к Wi-Fi и повтори.');
-                return { upgraded: 0, errors: 0, remaining: pending.length };
-            }
-            const today = new Date().toDateString();
-            let dailyStats = JSON.parse(localStorage.getItem('daily_stats') || '{}');
-            let todayCount = dailyStats[today] || 0;
+function copyLog() {
+  const text = logEntries.map(e => e.time + ' ' + e.message).join('\n');
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => alert('📋 Лог скопирован в буфер'));
+  } else {
+    alert('Копирование недоступно в этом браузере');
+  }
+}
 
-            let upgraded = 0, errors = 0, limitReached = false;
-            addLog('🔄 Проверка отложенных: ' + pending.length, 'info');
+function clearLog() {
+  logEntries = [];
+  renderLog();
+}
 
-            for (const p of pending) {
-                if (todayCount >= DAILY_API_LIMIT) { limitReached = true; break; }
-                try {
-                    const formData = new URLSearchParams();
-                    formData.append('qrraw', p.qr);
-                    formData.append('token', API_TOKEN);
-                    const resp = await fetch('https://proverkacheka.com/api/v1/check/get', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: formData
-                    });
-                    const data = await resp.json();
-                    todayCount++;
-                    dailyStats[today] = todayCount;
-                    localStorage.setItem('daily_stats', JSON.stringify(dailyStats));
-                    if (data.code === 1) { upgradeReceiptFromAPI(p.qr, data); upgraded++; }
-                    else { errors++; }
-                } catch (err) {
-                    addLog('❌ Сеть пропала на ' + upgraded + '/' + pending.length, 'error');
-                    break;
-                }
-            }
-            const remaining = getReceipts().filter(r => r.status === 'pending').length;
-            addLog('🔄 +' + upgraded + ' расшифровано, ошибок ' + errors + ', API ' + todayCount + '/' + DAILY_API_LIMIT, 'info');
-            updateCacheInfo();
-            if (showAlert) {
-                alert('🔄 Проверка завершена\n✅ Расшифровано: ' + upgraded + '\n❌ Ошибок: ' + errors
-                    + (limitReached ? '\n⚠️ Лимит API исчерпан, остальные — завтра' : '')
-                    + '\n\nОсталось отложенных: ' + remaining);
-            }
-            return { upgraded, errors, remaining, limitReached };
-        }
+// =====================================================================
+// НАСТРОЙКИ (модальное окно)
+// =====================================================================
+function openSettings() {
+  updateCacheInfo(); // обновит diagInfo
+  document.getElementById('settingsModal').classList.add('active');
+}
 
-        // =====================================================================
-        // ОТПРАВКА НА NAS
-        // =====================================================================
-        function build1CText(receipts) {
-            let txtContent = '#1C:UNF\n';
-            txtContent += '#Version:1.0\n';
-            txtContent += '#Encoding:UTF-8\n';
-            txtContent += '#Separator:;\n';
-            txtContent += '#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,QRString\n\n';
-            receipts.forEach(function (receipt) {
-                const date = String(receipt.date || '');
-                const total = String(receipt.total || '0.00');
-                const shop = String(receipt.shop || '').replace(/;/g, ',');
-                const inn = String(receipt.inn || '').replace(/;/g, ',');
-                const address = String(receipt.address || '').replace(/;/g, ',');
-                const checkNum = String(receipt.checkNumber || '').replace(/;/g, ',');
-                const shiftNum = String(receipt.shiftNumber || '').replace(/;/g, ',');
-                const cashier = String(receipt.cashier || '').replace(/;/g, ',');
-                const category = getCategoryName(receipt.category || 'uncategorized');
-                const paymentMethod = String(receipt.paymentMethod || 'unknown');
-                const qr = String(receipt.qr || '').replace(/;/g, ',').replace(/"/g, '""');
-                if (receipt.items && receipt.items.length > 0) {
-                    receipt.items.forEach(function (item) {
-                        const name = String(item.name || 'Товар').replace(/;/g, ',').replace(/"/g, '""');
-                        const qty = String(item.quantity || 1);
-                        const price = String(item.price || '0.00');
-                        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';"' + name + '";' + qty + ';' + price + ';' + qr + '\n';
-                    });
-                } else {
-                    txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';"Без детализации";1;' + total + ';' + qr + '\n';
-                }
-            });
-            return txtContent;
-        }
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('active');
+}
 
-        async function sendTo1C(includeSent, silent) {
-            const statusEl = document.getElementById('sendStatus');
-            if (!SENDER_URL) {
-                if (!silent) alert('⚠️ SENDER_URL не настроен');
-                return;
-            }
-            let receipts = getReceipts();
-            const toSend = includeSent
-                ? receipts.filter(r => r.status === 'ok')
-                : receipts.filter(r => r.status === 'ok' && !r.sent);
+// =====================================================================
+// РУЧНОЙ ВВОД ЧЕКА
+// =====================================================================
+function addManual() {
+  let qr = document.getElementById('manualQR').value.trim().replace(/\s/g, '');
+  if (!qr) { alert('⚠️ Вставьте строку чека'); return; }
+  const pos = qr.indexOf('t=');
+  if (pos === -1) { alert('⚠️ Не найден параметр t='); return; }
+  if (pos > 0) qr = qr.substring(pos);
+  document.getElementById('manualQR').value = '';
+  closeSettings();
+  addLog('⌨️ Ручной ввод строки', 'info');
+  lastScanTime = 0;
+  handleScan(qr);
+}
 
-            if (toSend.length === 0) {
-                if (!silent) alert('✅ Нечего отправлять.\n\nЕсли есть отложенные — сначала «🔄 Проверить отложенные».');
-                statusEl.textContent = '';
-                return;
-            }
-            if (!navigator.onLine) {
-                if (!silent) alert('📴 Нет сети.');
-                return;
-            }
-            const user = document.getElementById('senderUser').value;
-            const txt = build1CText(toSend);
-            const dateStr = new Date().toISOString().slice(0, 10);
-            const filename = '1C_Чеки_' + dateStr + '_' + Date.now() + '.txt';
+// =====================================================================
+// ОЧИСТКА ВСЕГО
+// =====================================================================
+function clearCodes() {
+  let receipts = getReceipts();
+  if (receipts.length === 0) { alert('Нет чеков для удаления'); return; }
+  if (confirm('⚠️ Удалить ВСЕ ' + receipts.length + ' чеков и кэш?\n\nЭто действие нельзя отменить!')) {
+    localStorage.removeItem('receipts');
+    localStorage.removeItem('receipts_cache');
+    localStorage.removeItem('daily_stats');
+    expandedIndex = null;
+    listExpanded = false;
+    loadSavedCodes();
+    updateCacheInfo();
+    closeSettings();
+    addLog('🗑️ Все чеки и кэш удалены', 'success');
+    alert('✅ Все чеки удалены!');
+  }
+}
 
-            statusEl.textContent = '⏳ Отправка ' + toSend.length + ' чеков...';
-            try {
-                const fd = new FormData();
-                fd.append('user', user);
-                fd.append('file', new Blob([txt], { type: 'text/plain;charset=utf-8' }), filename);
-                const resp = await fetch(SENDER_URL, { method: 'POST', body: fd });
-                if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                const qrSet = new Set(toSend.map(r => r.qr));
-                receipts.forEach(r => { if (qrSet.has(r.qr)) r.sent = true; });
-                setReceipts(receipts);
-                addLog('📤 Отправлено: ' + toSend.length + ' → 1-inbox/' + user, 'success');
-                statusEl.textContent = '✅ Отправлено ' + toSend.length + ' чеков';
-                loadSavedCodes();
-                updateCacheInfo();
-            } catch (err) {
-                const msg = err.message || String(err);
-                addLog('❌ Ошибка отправки: ' + msg, 'error');
-                statusEl.textContent = '❌ ' + msg;
-                if (!silent) {
-                    alert('❌ Не удалось отправить: ' + msg
-                        + '\n\nПроверь:\n1) Tailscale включён\n2) Wi-Fi есть\n3) ' + SENDER_URL);
-                }
-            }
-        }
+// =====================================================================
+// УТИЛИТЫ
+// =====================================================================
+function determinePaymentMethod(cashTotalSum, ecashTotalSum) {
+  const cash = cashTotalSum ? parseFloat(cashTotalSum) / 100 : 0;
+  const card = ecashTotalSum ? parseFloat(ecashTotalSum) / 100 : 0;
+  if (cash > 0 && card > 0) return 'mixed';
+  if (cash > 0) return 'cash';
+  if (card > 0) return 'card';
+  return 'unknown';
+}
 
-        // =====================================================================
-        // ЭКСПОРТ ФАЙЛОВ
-        // =====================================================================
-        function exportTo1C() {
-            let receipts = getReceipts();
-            if (receipts.length === 0) { alert('❌ Нет сохраненных чеков!'); return; }
-            try {
-                const txtContent = build1CText(receipts);
-                const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const dateStr = new Date().toISOString().slice(0, 10);
-                const filename = '1C_Чеки_' + dateStr + '.txt';
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-                alert('✅ Файл ' + filename + ' скачан!');
-            } catch (error) {
-                alert('❌ Ошибка экспорта: ' + error.message);
-            }
-        }
+function getPaymentMethodName(method) {
+  const names = { 'cash': '💵 Наличные', 'card': '💳 Карта', 'mixed': '💵💳 Смешанная', 'unknown': '❓ Неизвестно' };
+  return names[method] || '❓ Неизвестно';
+}
 
-        function exportToExcel() {
-            let receipts = getReceipts();
-            if (receipts.length === 0) { alert('❌ Нет сохраненных чеков!'); return; }
-            try {
-                let csvContent = '\uFEFFДата;Сумма;Организация;ИНН;Адрес;Чек№;Смена;Кассир;Категория;СпособОплаты;QR-строка\n';
-                receipts.forEach(function (receipt) {
-                    const date = String(receipt.date || '');
-                    const total = String(receipt.total || '0.00');
-                    const shop = String(receipt.shop || '').replace(/;/g, ',');
-                    const inn = String(receipt.inn || '').replace(/;/g, ',');
-                    const address = String(receipt.address || '').replace(/;/g, ',');
-                    const checkNum = String(receipt.checkNumber || '').replace(/;/g, ',');
-                    const shiftNum = String(receipt.shiftNumber || '').replace(/;/g, ',');
-                    const cashier = String(receipt.cashier || '').replace(/;/g, ',');
-                    const category = getCategoryName(receipt.category || 'uncategorized');
-                    const paymentMethod = getPaymentMethodName(receipt.paymentMethod || 'unknown');
-                    const qr = String(receipt.qr || '').replace(/"/g, '""');
-                    csvContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';"' + qr + '"\n';
-                });
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const dateStr = new Date().toISOString().slice(0, 10);
-                const filename = 'Чеки_ФНС_' + dateStr + '.csv';
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-                alert('✅ Файл ' + filename + ' скачан!');
-            } catch (error) {
-                alert('❌ Ошибка экспорта: ' + error.message);
-            }
-        }
+function parseQRDate(qrData) {
+  const t = extractQRParam(qrData, 't');
+  if (t && t.length >= 8) {
+    const date = t.substr(6, 2) + '.' + t.substr(4, 2) + '.' + t.substr(0, 4);
+    const time = t.length >= 12 ? t.substr(9, 2) + ':' + t.substr(11, 2) : '';
+    return time ? date + ' ' + time : date;
+  }
+  return new Date().toLocaleString('ru-RU');
+}
 
-        // =====================================================================
-        // СПИСОК ЧЕКОВ
-        // =====================================================================
-        function loadSavedCodes() {
-            let receipts = getReceipts();
-            document.getElementById('count').textContent = receipts.length;
-            const list = document.getElementById('codes-list');
-            if (receipts.length === 0) {
-                list.innerHTML = '<div class="empty-state">Нет сохраненных чеков<br>Отсканируйте первый чек!</div>';
-                return;
-            }
-            list.innerHTML = '';
-            const displayCodes = receipts.slice(-10).reverse();
+function parseQRSum(qrData) {
+  const s = extractQRParam(qrData, 's');
+  return s ? parseFloat(s).toFixed(2) : '0.00';
+}
 
-            displayCodes.forEach((receipt, index) => {
-                const realIndex = receipts.length - index;
-                const arrayIndex = receipts.length - 1 - index;
-                const div = document.createElement('div');
-                div.className = 'code-item';
-                if (receipt.status === 'pending') div.classList.add('partial-border');
-                if (receipt.sent) div.classList.add('sent-border');
-                if (!receipt.category || receipt.category === 'uncategorized') div.classList.add('no-category');
-
-                let html = '<div class="code-header"><span>Чек #' + realIndex + '</span><span>' + receipt.date + '</span>';
-                html += '<button class="btn-delete" onclick="deleteReceipt(' + arrayIndex + ')" title="Удалить">✕</button>';
-                html += '</div>';
-
-                let badges = '';
-                if (receipt.sent) badges += ' <span class="badge-sent">✅ отправлен</span>';
-                if (receipt.status === 'pending') badges += ' <span class="badge-pending">⏳ ждёт проверки</span>';
-                html += '<div class="receipt-summary">💰 ' + receipt.total + ' ₽' + badges + '</div>';
-
-                if (receipt.shop) html += '<div class="receipt-info">🏪 ' + receipt.shop + '</div>';
-                if (receipt.inn) html += '<div class="receipt-info">📋 ИНН: ' + receipt.inn + '</div>';
-                if (receipt.address) html += '<div class="receipt-info">📍 ' + receipt.address + '</div>';
-                if (receipt.checkNumber) html += '<div class="receipt-info">🧾 Чек № ' + receipt.checkNumber + '</div>';
-                if (receipt.cashier) html += '<div class="receipt-info">👤 Кассир: ' + receipt.cashier + '</div>';
-
-                if (receipt.paymentMethod) {
-                    html += '<div class="receipt-info">💰 ' + getPaymentMethodName(receipt.paymentMethod);
-                    if (receipt.cashTotalSum && receipt.cashTotalSum > 0) html += ' (нал: ' + receipt.cashTotalSum.toFixed(2) + ' ₽)';
-                    if (receipt.ecashTotalSum && receipt.ecashTotalSum > 0) html += ' (карта: ' + receipt.ecashTotalSum.toFixed(2) + ' ₽)';
-                    html += '</div>';
-                }
-
-                html += '<div class="category-selector">';
-                html += '<label>📁 Категория для 1С:</label>';
-                html += '<select onchange="updateCategory(' + arrayIndex + ', this.value)">';
-                CATEGORIES.forEach(cat => {
-                    const selected = receipt.category === cat.id ? 'selected' : '';
-                    html += '<option value="' + cat.id + '" ' + selected + '>' + cat.name + '</option>';
-                });
-                html += '</select></div>';
-
-                if (receipt.category && receipt.category !== 'uncategorized') {
-                    html += '<div class="category-badge">' + getCategoryName(receipt.category) + '</div>';
-                } else {
-                    html += '<div class="category-badge no-cat">⚠️ Категория не указана</div>';
-                }
-
-                html += '<div class="receipt-qr-string">' + receipt.qr + '</div>';
-
-                if (receipt.items && receipt.items.length > 0) {
-                    html += '<div class="receipt-items">';
-                    receipt.items.forEach(item => {
-                        html += '<div class="item-row"><span class="item-name">' + item.name + '</span><span class="item-qty">' + item.quantity + ' шт.</span><span class="item-price">' + item.sum + ' ₽</span></div>';
-                    });
-                    html += '</div>';
-                } else if (receipt.status === 'pending') {
-                    html += '<div style="font-size:12px;color:#ff9800;margin-top:5px">⏳ Состав появится после проверки API</div>';
-                }
-
-                div.innerHTML = html;
-                list.appendChild(div);
-            });
-        }
-
-        function deleteReceipt(index) {
-            let receipts = getReceipts();
-            if (index >= 0 && index < receipts.length) {
-                const deleted = receipts.splice(index, 1)[0];
-                setReceipts(receipts);
-                let cache = getCache();
-                delete cache[deleted.qr];
-                setCache(cache);
-                addLog('🗑️ Чек удалён', 'success');
-                loadSavedCodes();
-                updateCacheInfo();
-            }
-        }
-
-        function updateCategory(index, categoryId) {
-            let receipts = getReceipts();
-            if (index >= 0 && index < receipts.length) {
-                receipts[index].category = categoryId;
-                setReceipts(receipts);
-                let cache = getCache();
-                if (cache[receipts[index].qr]) {
-                    cache[receipts[index].qr].category = categoryId;
-                    setCache(cache);
-                }
-                addLog('✅ Категория: ' + getCategoryName(categoryId), 'success');
-                loadSavedCodes();
-            }
-        }
-
-        function getCategoryName(categoryId) {
-            const cat = CATEGORIES.find(c => c.id === categoryId);
-            return cat ? cat.name : 'Без категории';
-        }
-
-        function updateCacheInfo() {
-            const receipts = getReceipts();
-            const cache = getCache();
-            const cacheCount = Object.keys(cache).length;
-            const today = new Date().toDateString();
-            const dailyStats = JSON.parse(localStorage.getItem('daily_stats') || '{}');
-            const todayRequests = dailyStats[today] || 0;
-            const pendingCount = receipts.filter(r => r.status === 'pending').length;
-            const unsentCount = receipts.filter(r => r.status === 'ok' && !r.sent).length;
-
-            document.getElementById('cacheInfo').textContent =
-                '📦 Всего: ' + receipts.length +
-                ' | ⏳ Отложено: ' + pendingCount +
-                ' | 📤 К отправке: ' + unsentCount +
-                ' | 🌐 API: ' + todayRequests + '/' + DAILY_API_LIMIT +
-                ' | 💾 Кэш: ' + cacheCount;
-
-            const btnRetry = document.getElementById('btnRetry');
-            if (btnRetry) btnRetry.textContent = '🔄 Проверить отложенные (' + pendingCount + ')';
-
-            const banner = document.getElementById('alertBanner');
-            if (banner) {
-                if (unsentCount > 0) {
-                    banner.style.display = 'block';
-                    banner.textContent = '⚠️ Не отправлено: ' + unsentCount + ' чеков. NAS недоступен? Проверю снова через ' + AUTO_RETRY_MINUTES + ' мин.';
-                } else {
-                    banner.style.display = 'none';
-                }
-            }
-        }
-
-        function addLog(message, type) {
-            const logContainer = document.getElementById('logContainer');
-            if (logContainer.children.length === 1 && logContainer.children[0].style.color === 'rgb(153, 153, 153)') {
-                logContainer.innerHTML = '';
-            }
-            const logEntry = document.createElement('div');
-            logEntry.className = 'log-entry log-' + type;
-            logEntry.textContent = new Date().toLocaleTimeString() + ' ' + message;
-            logContainer.insertBefore(logEntry, logContainer.firstChild);
-            while (logContainer.children.length > 50) logContainer.removeChild(logContainer.lastChild);
-        }
-
-        function clearLog() {
-            document.getElementById('logContainer').innerHTML = '<div style="color: #999; text-align: center;">Лог пуст</div>';
-        }
-
-        function determinePaymentMethod(cashTotalSum, ecashTotalSum) {
-            const cash = cashTotalSum ? parseFloat(cashTotalSum) / 100 : 0;
-            const card = ecashTotalSum ? parseFloat(ecashTotalSum) / 100 : 0;
-            if (cash > 0 && card > 0) return 'mixed';
-            if (cash > 0) return 'cash';
-            if (card > 0) return 'card';
-            return 'unknown';
-        }
-
-        function getPaymentMethodName(method) {
-            const names = { 'cash': '💵 Наличные', 'card': '💳 Карта', 'mixed': '💵💳 Смешанная', 'unknown': '❓ Неизвестно' };
-            return names[method] || '❓ Неизвестно';
-        }
-
-        function parseQRDate(qrData) {
-            const t = extractQRParam(qrData, 't');
-            if (t && t.length >= 8) {
-                const date = t.substr(6, 2) + '.' + t.substr(4, 2) + '.' + t.substr(0, 4);
-                const time = t.length >= 12 ? t.substr(9, 2) + ':' + t.substr(11, 2) : '';
-                return time ? date + ' ' + time : date;
-            }
-            return new Date().toLocaleString('ru-RU');
-        }
-
-        function parseQRSum(qrData) {
-            const s = extractQRParam(qrData, 's');
-            return s ? parseFloat(s).toFixed(2) : '0.00';
-        }
-
-        function extractQRParam(qrData, paramName) {
-            const params = new URLSearchParams(qrData);
-            return params.get(paramName);
-        }
-
-        function addManual() {
-            let qr = document.getElementById('manualQR').value.trim().replace(/\s/g, '');
-            if (!qr) { alert('⚠️ Вставьте строку чека'); return; }
-            const pos = qr.indexOf('t=');
-            if (pos === -1) { alert('⚠️ Не найден параметр t= — это не код чека'); return; }
-            if (pos > 0) qr = qr.substring(pos);
-            document.getElementById('manualQR').value = '';
-            addLog('⌨️ Ручной ввод строки', 'info');
-            lastScanTime = 0;
-            handleScan(qr);
-        }
-
-        function clearCodes() {
-            let receipts = getReceipts();
-            if (receipts.length === 0) { alert('Нет чеков для удаления'); return; }
-            if (confirm('⚠️ Удалить ВСЕ ' + receipts.length + ' чеков и кэш?\n\nЭто действие нельзя отменить!')) {
-                localStorage.removeItem('receipts');
-                localStorage.removeItem('receipts_cache');
-                localStorage.removeItem('daily_stats');
-                loadSavedCodes();
-                updateCacheInfo();
-                addLog('🗑️ Все чеки и кэш удалены', 'success');
-                alert('✅ Все чеки удалены!');
-            }
-        }
-    </script>
+function extractQRParam(qrData, paramName) {
+  const params = new URLSearchParams(qrData);
+  return params.get(paramName);
+}
+</script>
 </body>
 </html>
