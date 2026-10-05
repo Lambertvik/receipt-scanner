@@ -253,9 +253,9 @@ function setCache(o) { localStorage.setItem('receipts_cache', JSON.stringify(o))
 // СТАРТ
 // =====================================================================
 window.onload = function () {
+  addLog('✅ Сканер готов (v15.2)', 'success');
   loadSavedCodes();
   updateCacheInfo();
-  addLog('✅ Сканер готов (v15.2)', 'success');
   registerSW();
   if (navigator.onLine) {
     addLog('🌐 Онлайн: автопроверка через 2 сек', 'info');
@@ -729,7 +729,10 @@ function renderReceiptsList() {
       }
       html += '<div style="font-family:monospace;font-size:10px;color:#888;background:#eee;padding:6px;border-radius:4px;margin-top:8px;word-break:break-all;">' + receipt.qr + '</div>';
       div.innerHTML = html;
-      div.onclick = (e) => { if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON') toggleReceiptDetail(realIndex); };
+      div.onclick = (e) => {
+  if (e.target.closest('select') || e.target.closest('button')) return;
+  toggleReceiptDetail(realIndex);
+};
       list.appendChild(div);
     } else {
       // Компактный вид
