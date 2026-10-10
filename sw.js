@@ -1,4 +1,4 @@
-const CACHE_NAME = 'receipt-scanner-v3';
+const CACHE_NAME = 'receipt-scanner-v4';
 const OFFLINE_ASSETS = [
   './scanner.html',
   './manifest.json',
