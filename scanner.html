@@ -35,14 +35,29 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .btn-secondary { background: #2196F3; color: white; }
 .btn-sm { padding: 10px; font-size: 14px; margin: 6px 0; }
 
-.receipts-summary { display: flex; justify-content: space-between; align-items: center; padding: 12px 10px; background: #f5f5f5; border-radius: 10px; margin-top: 12px; cursor: pointer; user-select: none; }
-.receipts-summary:active { background: #e8e8e8; }
-.receipts-summary .title { font-size: 14px; font-weight: bold; color: #333; }
-.receipts-summary .arrow { font-size: 18px; color: #666; transition: transform 0.2s; }
-.receipts-summary.expanded .arrow { transform: rotate(90deg); }
+.section-title { display: flex; justify-content: space-between; align-items: center; padding: 12px 10px; background: #f5f5f5; border-radius: 10px; margin-top: 14px; cursor: pointer; user-select: none; }
+.section-title:active { background: #e8e8e8; }
+.section-title .title { font-size: 14px; font-weight: bold; color: #333; }
+.section-title .arrow { font-size: 18px; color: #666; transition: transform 0.2s; }
+.section-title.expanded .arrow { transform: rotate(90deg); }
+
+.last-receipt { margin-top: 10px; background: #f8f9fa; border-left: 4px solid #4CAF50; border-radius: 8px; padding: 14px; font-size: 13px; }
+.last-receipt.pending { border-left-color: #ff9800; }
+.last-receipt.sent { border-left-color: #2196F3; }
+.last-receipt .lr-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: bold; font-size: 14px; color: #333; }
+.last-receipt .lr-sum { font-size: 20px; color: #111; font-weight: 800; margin-bottom: 8px; }
+.last-receipt .lr-badge { font-size: 12px; margin-left: 6px; }
+.last-receipt .lr-info { color: #555; margin-bottom: 5px; word-break: break-word; line-height: 1.4; }
+.last-receipt .lr-items { background: white; padding: 10px; border-radius: 6px; margin-top: 8px; }
+.last-receipt .lr-item-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; font-size: 12px; }
+.last-receipt .lr-item-row:last-child { border-bottom: none; }
+.last-receipt .lr-cat { width: 100%; padding: 8px; border: 1px solid #ff9800; border-radius: 6px; font-size: 13px; margin-top: 10px; background: white; }
+.last-receipt .lr-qr { font-family: monospace; font-size: 10px; color: #888; background: #eee; padding: 8px; border-radius: 4px; margin-top: 8px; word-break: break-all; }
+.last-receipt .lr-actions { margin-top: 10px; display: flex; gap: 8px; }
+.last-receipt .lr-actions button { flex: 1; padding: 8px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; }
 
 .receipts-list { margin-top: 8px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
-.receipts-list.expanded { max-height: 6000px; }
+.receipts-list.expanded { max-height: 8000px; }
 
 .receipt-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; margin: 6px 0; background: #f8f9fa; border-left: 4px solid #4CAF50; border-radius: 6px; cursor: pointer; font-size: 14px; gap: 8px; }
 .receipt-row:active { background: #eef1f3; }
@@ -53,13 +68,17 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .receipt-row .badge { font-size: 12px; white-space: nowrap; }
 
 .receipt-detail { background: #f8f9fa; border-left: 4px solid #4CAF50; border-radius: 6px; padding: 12px; margin: 6px 0; font-size: 13px; }
+.receipt-detail.pending { border-left-color: #ff9800; }
+.receipt-detail.sent { border-left-color: #2196F3; }
 .receipt-detail .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: bold; }
 .receipt-detail .btn-delete { background: #f44336; color: white; border: none; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; cursor: pointer; flex-shrink: 0; }
+.receipt-detail .detail-sum { font-size: 18px; font-weight: bold; margin-bottom: 8px; }
 .receipt-detail .info { color: #555; margin-bottom: 4px; word-break: break-word; }
 .receipt-detail .items { background: white; padding: 8px; border-radius: 4px; margin-top: 6px; }
 .receipt-detail .item-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee; font-size: 12px; }
 .receipt-detail .item-row:last-child { border-bottom: none; }
 .receipt-detail .cat-select { width: 100%; padding: 6px; border: 1px solid #ff9800; border-radius: 4px; font-size: 12px; margin-top: 8px; }
+.receipt-detail .qr-str { font-family: monospace; font-size: 10px; color: #888; background: #eee; padding: 6px; border-radius: 4px; margin-top: 8px; word-break: break-all; }
 
 .empty-state { text-align: center; padding: 24px 12px; color: #999; font-style: italic; font-size: 13px; }
 
@@ -71,7 +90,6 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 
 .footer { text-align: center; margin-top: 16px; color: rgba(255,255,255,0.8); font-size: 11px; }
 
-/* Модальные окна */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 12px; }
 .modal-overlay.active { display: flex; }
 .modal { background: white; border-radius: 16px; width: 100%; max-width: 600px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
@@ -81,7 +99,6 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .modal-footer { padding: 12px 16px; border-top: 1px solid #eee; display: flex; gap: 8px; }
 .modal-footer .button { flex: 1; margin: 0; }
 
-/* Лог */
 .log-modal-body { background: #1e1e1e; font-family: 'Courier New', monospace; font-size: 14px; padding: 12px; }
 .log-entry { padding: 8px 10px; margin: 6px 0; border-radius: 6px; line-height: 1.4; word-break: break-word; }
 .log-info { background: #2d2d2d; color: #d4d4d4; border-left: 3px solid #2196F3; }
@@ -89,7 +106,6 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .log-error { background: #3a1e1e; color: #ff8080; border-left: 3px solid #f44336; }
 .log-empty { color: #999; text-align: center; padding: 30px; font-size: 13px; }
 
-/* Настройки */
 .settings-group { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #eee; }
 .settings-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 .settings-group label { font-size: 13px; font-weight: bold; color: #333; display: block; margin-bottom: 6px; }
@@ -113,13 +129,17 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <button class="button btn-scan" id="scanBtn" onclick="toggleScan()">📷 Начать сканирование</button>
   <button class="button btn-send" id="sendBtn" onclick="sendTo1C(false, false)">📤 Отправить в 1С</button>
 
-  <div class="receipts-summary" id="receiptsSummary" onclick="toggleReceiptsList()">
-    <span class="title" id="receiptsTitle">📂 Последние чеки</span>
+  <div class="section-title expanded" id="lastSection" onclick="toggleLastSection()">
+    <span class="title">🆕 Последний чек</span>
     <span class="arrow">▸</span>
   </div>
-  <div class="receipts-list" id="receiptsList">
-    <div class="empty-state">Нет сохранённых чеков<br>Отсканируйте первый чек!</div>
+  <div id="lastReceiptBox"></div>
+
+  <div class="section-title" id="receiptsSection" onclick="toggleReceiptsSection()">
+    <span class="title" id="receiptsTitle">📂 Остальные чеки</span>
+    <span class="arrow">▸</span>
   </div>
+  <div class="receipts-list" id="receiptsList"></div>
 
   <div class="bottom-buttons">
     <button class="button btn-sm btn-secondary" onclick="openSettings()">⚙️ Настройки</button>
@@ -129,9 +149,8 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <div class="stats-small" id="statsSmall"></div>
 </div>
 
-<div class="footer">v15.2 | Офлайн-скан + авто-дозапрос + авто-отправка в 1С</div>
+<div class="footer">v15.3 | Локальный+Tailscale · авто-отправка · «От кого» запоминается</div>
 
-<!-- Модальное окно: ЛОГ -->
 <div class="modal-overlay" id="logModal">
   <div class="modal">
     <div class="modal-header">
@@ -148,7 +167,6 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   </div>
 </div>
 
-<!-- Модальное окно: НАСТРОЙКИ -->
 <div class="modal-overlay" id="settingsModal">
   <div class="modal">
     <div class="modal-header">
@@ -157,13 +175,13 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
     </div>
     <div class="modal-body">
       <div class="settings-group">
-        <label>👤 Кто сканирует</label>
+        <label>👤 Кто сканирует (запоминается на этом телефоне)</label>
         <select id="senderUser">
           <option value="lambert">lambert</option>
           <option value="mama">mama</option>
           <option value="papa">papa</option>
         </select>
-        <div class="hint">Файл уйдёт в папку 1-inbox/&lt;имя&gt;/ на NAS</div>
+        <div class="hint">Файл уйдёт в папку 1-inbox/&lt;имя&gt;/ на NAS. Выбор сохраняется автоматически.</div>
       </div>
 
       <div class="settings-group">
@@ -206,11 +224,9 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 const API_TOKEN = "53441.ZLqLc0Gvo8gziNZXF";
 const DAILY_API_LIMIT = 15;
 const AUTO_RETRY_MINUTES = 2;
-const RECENT_COUNT = 5;
 const LOCAL_TIMEOUT_MS = 3000;
 
-// v15.2: dual-URL. Первый — локальный, второй — Tailscale.
-// Пробуем по очереди; используем тот, что ответил.
+// v15.3: dual-URL (локальный + Tailscale). Локальный Caddy — задача на будущее.
 const SENDER_URLS = [
   'https://192.168.10.22:8443/upload',
   'https://synology-flat11.taila10dc4.ts.net:8443/upload'
@@ -238,8 +254,9 @@ let scanning = false;
 let scanTimeout = null;
 let stream = null;
 let autoRetryIntervalId = null;
-let listExpanded = false;
+let receiptsExpanded = false;
 let expandedIndex = null;
+let lastSectionExpanded = true;
 
 // =====================================================================
 // ХРАНИЛИЩЕ
@@ -248,27 +265,48 @@ function getReceipts() { return JSON.parse(localStorage.getItem('receipts') || '
 function setReceipts(a) { localStorage.setItem('receipts', JSON.stringify(a)); }
 function getCache() { return JSON.parse(localStorage.getItem('receipts_cache') || '{}'); }
 function setCache(o) { localStorage.setItem('receipts_cache', JSON.stringify(o)); }
+function getSenderUser() { return localStorage.getItem('sender_user') || 'lambert'; }
+function setSenderUser(u) { localStorage.setItem('sender_user', u); }
 
 // =====================================================================
 // СТАРТ
 // =====================================================================
 window.onload = function () {
-  loadSavedCodes();
+  // Восстанавливаем «от кого»
+  const savedUser = getSenderUser();
+  const selectEl = document.getElementById('senderUser');
+  if (selectEl) selectEl.value = savedUser;
+  // Обработчик смены — сохраняем
+  if (selectEl) {
+    selectEl.addEventListener('change', function () {
+      setSenderUser(this.value);
+      addLog('👤 Отправитель: ' + this.value, 'info');
+    });
+  }
+
+  renderLastReceipt();
+  renderReceiptsList();
   updateCacheInfo();
-  addLog('✅ Сканер готов (v15.2)', 'success');
+  addLog('✅ Сканер готов (v15.3), отправитель: ' + savedUser, 'success');
   registerSW();
+
+  // Автосинк — только если есть pending
   if (navigator.onLine) {
-    addLog('🌐 Онлайн: автопроверка через 2 сек', 'info');
-    setTimeout(autoSync, 2000);
+    const pending = getReceipts().filter(r => r.status === 'pending').length;
+    if (pending > 0) {
+      addLog('🌐 Найдено pending: ' + pending + ', проверю через 2 сек', 'info');
+      setTimeout(autoSync, 2000);
+    }
   } else {
-    addLog('📴 Офлайн: чеки сохранятся, синхронизация дома', 'info');
+    addLog('📴 Офлайн: чеки сохранятся', 'info');
   }
   startAutoRetryTimer();
 };
 
 window.addEventListener('online', () => {
-  addLog('🌐 Сеть появилась, автосинк', 'success');
-  setTimeout(autoSync, 1500);
+  addLog('🌐 Сеть появилась', 'success');
+  const pending = getReceipts().filter(r => r.status === 'pending').length;
+  if (pending > 0) setTimeout(autoSync, 1500);
 });
 
 async function autoSync() {
@@ -345,7 +383,7 @@ function tick() {
 }
 
 // =====================================================================
-// РАСПОЗНАВАНИЕ (офлайн-first)
+// РАСПОЗНАВАНИЕ
 // =====================================================================
 async function handleScan(qrData) {
   if (isProcessing) return;
@@ -365,8 +403,7 @@ async function handleScan(qrData) {
     addLog('✅ Чек взят из кэша', 'success');
     receipts.push(cache[qrData]);
     setReceipts(receipts);
-    loadSavedCodes();
-    updateCacheInfo();
+    renderAll();
     stopCamera();
     return;
   }
@@ -386,8 +423,7 @@ async function handleScan(qrData) {
   };
   receipts.push(pendingReceipt);
   setReceipts(receipts);
-  loadSavedCodes();
-  updateCacheInfo();
+  renderAll();
   if (navigator.vibrate) navigator.vibrate(100);
 
   if (!navigator.onLine) {
@@ -467,8 +503,7 @@ function upgradeReceiptFromAPI(qrData, apiResponse) {
   let cache = getCache();
   cache[qrData] = receipts[idx];
   setCache(cache);
-  loadSavedCodes();
-  updateCacheInfo();
+  renderAll();
   return receipts[idx];
 }
 
@@ -524,7 +559,7 @@ async function retryPending(showAlert) {
 }
 
 // =====================================================================
-// ОТПРАВКА НА NAS (dual URL с fallback)
+// ОТПРАВКА НА NAS
 // =====================================================================
 function build1CText(receipts) {
   let txtContent = '#1C:UNF\n';
@@ -588,7 +623,7 @@ async function sendTo1C(includeSent, silent) {
     if (!silent) alert('📴 Нет сети.');
     return;
   }
-  const user = document.getElementById('senderUser').value;
+  const user = getSenderUser();
   const txt = build1CText(toSend);
   const dateStr = new Date().toISOString().slice(0, 10);
   const filename = '1C_Чеки_' + dateStr + '_' + Date.now() + '.txt';
@@ -624,12 +659,11 @@ async function sendTo1C(includeSent, silent) {
   setReceipts(receipts);
   const shortUrl = usedUrl.includes('192.168') ? 'локально' : 'Tailscale';
   addLog('📤 Отправлено: ' + toSend.length + ' → ' + user + ' (' + shortUrl + ')', 'success');
-  loadSavedCodes();
-  updateCacheInfo();
+  renderAll();
 }
 
 // =====================================================================
-// ЭКСПОРТ TXT (резерв)
+// ЭКСПОРТ TXT
 // =====================================================================
 function exportTo1C() {
   let receipts = getReceipts();
@@ -654,15 +688,81 @@ function exportTo1C() {
 }
 
 // =====================================================================
-// СПИСОК ЧЕКОВ (компактный, раскрываемый)
+// ПОСЛЕДНИЙ ЧЕК (раскрытый полностью)
 // =====================================================================
-function toggleReceiptsList() {
-  listExpanded = !listExpanded;
+function toggleLastSection() {
+  lastSectionExpanded = !lastSectionExpanded;
+  document.getElementById('lastSection').classList.toggle('expanded', lastSectionExpanded);
+  renderLastReceipt();
+}
+
+function renderLastReceipt() {
+  const box = document.getElementById('lastReceiptBox');
+  const receipts = getReceipts();
+  if (receipts.length === 0) {
+    box.innerHTML = '<div class="empty-state">Нет чеков. Отсканируйте первый!</div>';
+    return;
+  }
+  if (!lastSectionExpanded) {
+    box.innerHTML = '';
+    return;
+  }
+  const receipt = receipts[receipts.length - 1];
+  const realIndex = receipts.length - 1;
+  const div = document.createElement('div');
+  div.className = 'last-receipt';
+  if (receipt.status === 'pending') div.classList.add('pending');
+  if (receipt.sent) div.classList.add('sent');
+
+  let html = '<div class="lr-header"><span>' + (receipt.date || '') + '</span>';
+  html += '<button style="background:#f44336;color:white;border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;" onclick="deleteReceipt(' + realIndex + ')">✕</button></div>';
+  let badges = '';
+  if (receipt.sent) badges += '<span class="lr-badge" style="color:#4CAF50;">✅ отправлен</span>';
+  if (receipt.status === 'pending') badges += '<span class="lr-badge" style="color:#ff9800;">⏳ ждёт проверки</span>';
+  html += '<div class="lr-sum">💰 ' + (receipt.total || '0.00') + ' ₽' + badges + '</div>';
+  if (receipt.shop) html += '<div class="lr-info">🏪 ' + receipt.shop + '</div>';
+  if (receipt.inn) html += '<div class="lr-info">📋 ИНН: ' + receipt.inn + '</div>';
+  if (receipt.address) html += '<div class="lr-info">📍 ' + receipt.address + '</div>';
+  if (receipt.checkNumber) html += '<div class="lr-info">🧾 Чек № ' + receipt.checkNumber + '</div>';
+  if (receipt.shiftNumber) html += '<div class="lr-info">📅 Смена: ' + receipt.shiftNumber + '</div>';
+  if (receipt.cashier) html += '<div class="lr-info">👤 Кассир: ' + receipt.cashier + '</div>';
+  if (receipt.paymentMethod) {
+    html += '<div class="lr-info">💰 ' + getPaymentMethodName(receipt.paymentMethod);
+    if (receipt.cashTotalSum > 0) html += ' (нал: ' + receipt.cashTotalSum.toFixed(2) + ')';
+    if (receipt.ecashTotalSum > 0) html += ' (карта: ' + receipt.ecashTotalSum.toFixed(2) + ')';
+    html += '</div>';
+  }
+  html += '<select class="lr-cat" onchange="updateCategory(' + realIndex + ', this.value)">';
+  CATEGORIES.forEach(cat => {
+    const selected = receipt.category === cat.id ? 'selected' : '';
+    html += '<option value="' + cat.id + '" ' + selected + '>' + cat.name + '</option>';
+  });
+  html += '</select>';
+  if (receipt.items && receipt.items.length > 0) {
+    html += '<div class="lr-items">';
+    receipt.items.forEach(item => {
+      html += '<div class="lr-item-row"><span>' + item.name + '</span><span>' + item.quantity + ' шт.</span><span style="font-weight:600;color:#4CAF50;">' + item.sum + ' ₽</span></div>';
+    });
+    html += '</div>';
+  } else if (receipt.status === 'pending') {
+    html += '<div style="font-size:12px;color:#ff9800;margin-top:6px;">⏳ Состав появится после проверки API</div>';
+  }
+  if (receipt.qr) {
+    html += '<div class="lr-qr">' + receipt.qr + '</div>';
+  }
+  div.innerHTML = html;
+  box.innerHTML = '';
+  box.appendChild(div);
+}
+
+// =====================================================================
+// ОСТАЛЬНЫЕ ЧЕКИ (шторка: неотправленные + pending + отправленные)
+// =====================================================================
+function toggleReceiptsSection() {
+  receiptsExpanded = !receiptsExpanded;
   expandedIndex = null;
-  const list = document.getElementById('receiptsList');
-  const summary = document.getElementById('receiptsSummary');
-  list.classList.toggle('expanded', listExpanded);
-  summary.classList.toggle('expanded', listExpanded);
+  document.getElementById('receiptsList').classList.toggle('expanded', receiptsExpanded);
+  document.getElementById('receiptsSection').classList.toggle('expanded', receiptsExpanded);
   renderReceiptsList();
 }
 
@@ -676,43 +776,53 @@ function renderReceiptsList() {
   const list = document.getElementById('receiptsList');
   const title = document.getElementById('receiptsTitle');
 
-  title.textContent = listExpanded
-    ? '📂 Все чеки (' + receipts.length + ')'
-    : '📂 Последние чеки';
+  // Остальные = все, кроме последнего
+  const others = receipts.slice(0, receipts.length - 1);
 
-  if (receipts.length === 0) {
-    list.innerHTML = '<div class="empty-state">Нет сохранённых чеков<br>Отсканируйте первый чек!</div>';
+  // Сортируем: сначала pending, потом неотправленные ok, потом отправленные
+  const pendingList = others.filter(r => r.status === 'pending');
+  const unsentList = others.filter(r => r.status === 'ok' && !r.sent);
+  const sentList = others.filter(r => r.sent);
+  const orderedOthers = pendingList.concat(unsentList).concat(sentList);
+  // Внутри каждой группы — свежие сверху
+  const orderedReversed = pendingList.slice().reverse()
+    .concat(unsentList.slice().reverse())
+    .concat(sentList.slice().reverse());
+
+  title.textContent = receiptsExpanded
+    ? '📂 Все чеки (' + others.length + ')'
+    : '📂 Остальные чеки (' + others.length + ')';
+
+  if (orderedReversed.length === 0) {
+    list.innerHTML = '<div class="empty-state">Других чеков нет.</div>';
     return;
   }
 
-  const displayList = listExpanded ? receipts.slice().reverse() : receipts.slice(-RECENT_COUNT).reverse();
   list.innerHTML = '';
-
-  displayList.forEach((receipt) => {
+  orderedReversed.forEach((receipt) => {
     const realIndex = receipts.indexOf(receipt);
 
     if (expandedIndex === realIndex) {
-      // Развёрнутый вид
+      // Раскрытая карточка
       const div = document.createElement('div');
       div.className = 'receipt-detail';
+      if (receipt.status === 'pending') div.classList.add('pending');
+      if (receipt.sent) div.classList.add('sent');
       let html = '<div class="detail-header"><span>' + (receipt.date || '') + '</span>';
       html += '<button class="btn-delete" onclick="event.stopPropagation();deleteReceipt(' + realIndex + ')">✕</button></div>';
       let badges = '';
-      if (receipt.sent) badges += ' <span style="color:#4CAF50;font-size:12px;">✅ отправлен</span>';
-      if (receipt.status === 'pending') badges += ' <span style="color:#ff9800;font-size:12px;">⏳ ждёт проверки</span>';
-      html += '<div style="font-size:16px;font-weight:bold;margin-bottom:6px;">💰 ' + receipt.total + ' ₽' + badges + '</div>';
+      if (receipt.sent) badges += ' <span style="color:#4CAF50;font-size:12px;">✅</span>';
+      if (receipt.status === 'pending') badges += ' <span style="color:#ff9800;font-size:12px;">⏳</span>';
+      html += '<div class="detail-sum">💰 ' + (receipt.total || '0.00') + ' ₽' + badges + '</div>';
       if (receipt.shop) html += '<div class="info">🏪 ' + receipt.shop + '</div>';
       if (receipt.inn) html += '<div class="info">📋 ИНН: ' + receipt.inn + '</div>';
       if (receipt.address) html += '<div class="info">📍 ' + receipt.address + '</div>';
       if (receipt.checkNumber) html += '<div class="info">🧾 Чек № ' + receipt.checkNumber + '</div>';
       if (receipt.cashier) html += '<div class="info">👤 ' + receipt.cashier + '</div>';
       if (receipt.paymentMethod) {
-        html += '<div class="info">💰 ' + getPaymentMethodName(receipt.paymentMethod);
-        if (receipt.cashTotalSum > 0) html += ' (нал: ' + receipt.cashTotalSum.toFixed(2) + ')';
-        if (receipt.ecashTotalSum > 0) html += ' (карта: ' + receipt.ecashTotalSum.toFixed(2) + ')';
-        html += '</div>';
+        html += '<div class="info">💰 ' + getPaymentMethodName(receipt.paymentMethod) + '</div>';
       }
-      html += '<select class="cat-select" onchange="updateCategory(' + realIndex + ', this.value)">';
+      html += '<select class="cat-select" onchange="event.stopPropagation();updateCategory(' + realIndex + ', this.value)">';
       CATEGORIES.forEach(cat => {
         const selected = receipt.category === cat.id ? 'selected' : '';
         html += '<option value="' + cat.id + '" ' + selected + '>' + cat.name + '</option>';
@@ -727,12 +837,17 @@ function renderReceiptsList() {
       } else if (receipt.status === 'pending') {
         html += '<div style="font-size:12px;color:#ff9800;margin-top:6px;">⏳ Состав появится после проверки API</div>';
       }
-      html += '<div style="font-family:monospace;font-size:10px;color:#888;background:#eee;padding:6px;border-radius:4px;margin-top:8px;word-break:break-all;">' + receipt.qr + '</div>';
+      if (receipt.qr) {
+        html += '<div class="qr-str">' + receipt.qr + '</div>';
+      }
       div.innerHTML = html;
-      div.onclick = (e) => { if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON') toggleReceiptDetail(realIndex); };
+      div.onclick = (e) => {
+        if (e.target.closest('select') || e.target.closest('button')) return;
+        toggleReceiptDetail(realIndex);
+      };
       list.appendChild(div);
     } else {
-      // Компактный вид
+      // Компактная строка
       const div = document.createElement('div');
       div.className = 'receipt-row';
       if (receipt.status === 'pending') div.classList.add('pending');
@@ -740,8 +855,9 @@ function renderReceiptsList() {
       let badge = '';
       if (receipt.sent) badge = '<span class="badge" style="color:#4CAF50;">✅</span>';
       else if (receipt.status === 'pending') badge = '<span class="badge" style="color:#ff9800;">⏳</span>';
+      else badge = '<span class="badge" style="color:#FF7F3F;">📤</span>';
       div.innerHTML = '<span class="date">' + shortDate(receipt.date) + '</span>'
-        + '<span class="sum">' + receipt.total + ' ₽</span>'
+        + '<span class="sum">' + (receipt.total || '0.00') + ' ₽</span>'
         + badge;
       div.onclick = () => toggleReceiptDetail(realIndex);
       list.appendChild(div);
@@ -756,7 +872,11 @@ function shortDate(d) {
   return datePart.length > 8 ? datePart.substring(0, 8) : datePart;
 }
 
-function loadSavedCodes() { renderReceiptsList(); }
+function renderAll() {
+  renderLastReceipt();
+  renderReceiptsList();
+  updateCacheInfo();
+}
 
 function deleteReceipt(index) {
   let receipts = getReceipts();
@@ -768,8 +888,7 @@ function deleteReceipt(index) {
     setCache(cache);
     expandedIndex = null;
     addLog('🗑️ Чек удалён', 'success');
-    loadSavedCodes();
-    updateCacheInfo();
+    renderAll();
   }
 }
 
@@ -812,7 +931,8 @@ function updateCacheInfo() {
 
   document.getElementById('statsSmall').innerHTML =
     (navigator.onLine ? '🌐 Онлайн' : '📴 Офлайн') +
-    ' | ✅ Отправлено: <b>' + sentCount + '</b>';
+    ' | ✅ Отправлено: <b>' + sentCount + '</b>' +
+    ' | 👤 <b>' + getSenderUser() + '</b>';
 
   const sendBtn = document.getElementById('sendBtn');
   if (unsentCount > 0) {
@@ -825,20 +945,21 @@ function updateCacheInfo() {
   const banner = document.getElementById('alertBanner');
   if (unsentCount > 0 && navigator.onLine) {
     banner.style.display = 'block';
-    banner.textContent = '⚠️ Не отправлено: ' + unsentCount + '. NAS недоступен? Проверю снова через ' + AUTO_RETRY_MINUTES + ' мин.';
+    banner.textContent = '⚠️ Не отправлено: ' + unsentCount + '. NAS недоступен? Проверю через ' + AUTO_RETRY_MINUTES + ' мин.';
   } else {
     banner.style.display = 'none';
   }
 
   const diag = document.getElementById('diagInfo');
   if (diag) {
-    diag.innerHTML = 'Адреса:<br>1. ' + SENDER_URLS[0] + '<br>2. ' + SENDER_URLS[1] +
-      '<br><br>Версия: v15.2<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
+    diag.innerHTML = 'Отправитель: ' + getSenderUser() +
+      '<br><br>Адреса (по очереди):<br>1. ' + SENDER_URLS[0] + '<br>2. ' + SENDER_URLS[1] +
+      '<br><br>Версия: v15.3<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
   }
 }
 
 // =====================================================================
-// ЛОГ (модальное окно)
+// ЛОГ
 // =====================================================================
 let logEntries = [];
 
@@ -855,12 +976,12 @@ function addLog(message, type) {
 
 function renderLog() {
   const container = document.getElementById('logContainer');
+  if (!container) return;
   if (logEntries.length === 0) {
     container.innerHTML = '<div class="log-empty">Лог пуст</div>';
     return;
   }
   container.innerHTML = '';
-  // Свежие — сверху
   for (let i = logEntries.length - 1; i >= 0; i--) {
     const e = logEntries[i];
     const div = document.createElement('div');
@@ -894,10 +1015,10 @@ function clearLog() {
 }
 
 // =====================================================================
-// НАСТРОЙКИ (модальное окно)
+// НАСТРОЙКИ
 // =====================================================================
 function openSettings() {
-  updateCacheInfo(); // обновит diagInfo
+  updateCacheInfo();
   document.getElementById('settingsModal').classList.add('active');
 }
 
@@ -932,9 +1053,8 @@ function clearCodes() {
     localStorage.removeItem('receipts_cache');
     localStorage.removeItem('daily_stats');
     expandedIndex = null;
-    listExpanded = false;
-    loadSavedCodes();
-    updateCacheInfo();
+    receiptsExpanded = false;
+    renderAll();
     closeSettings();
     addLog('🗑️ Все чеки и кэш удалены', 'success');
     alert('✅ Все чеки удалены!');
