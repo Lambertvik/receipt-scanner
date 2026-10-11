@@ -1,9 +1,9 @@
-const CACHE_NAME = 'receipt-scanner-v4';
+const CACHE_NAME = 'receipt-scanner-v5';
 const OFFLINE_ASSETS = [
   './scanner.html',
   './manifest.json',
   './index.html',
-  'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'
+  './jsQR.js'
 ];
 
 self.addEventListener('install', event => {
