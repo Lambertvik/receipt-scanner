@@ -35,24 +35,17 @@ self.addEventListener('fetch', event => {
   if (req.method !== 'GET') return;
   if (req.url.includes('proverkacheka.com')) return;
   if (req.url.includes('/upload')) return;
+  if (!req.url.startsWith(self.location.origin)) return;
 
   event.respondWith(
     caches.match(req).then(cached => {
-      if (cached) {
-        fetch(req).then(resp => {
-          if (resp && resp.ok && req.url.startsWith(self.location.origin)) {
-            caches.open(CACHE_NAME).then(c => c.put(req, resp.clone()));
-          }
-        }).catch(() => {});
-        return cached;
-      }
-      return fetch(req).then(resp => {
-        if (resp && resp.ok && req.url.startsWith(self.location.origin)) {
-          const clone = resp.clone();
-          caches.open(CACHE_NAME).then(c => c.put(req, clone));
+      const network = fetch(req).then(resp => {
+        if (resp && resp.ok) {
+          caches.open(CACHE_NAME).then(c => c.put(req, resp.clone()));
         }
         return resp;
-      }).catch(() => new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } }));
+      }).catch(() => cached);
+      return cached || network;
     })
   );
 });
