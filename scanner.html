@@ -53,8 +53,6 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .last-receipt .lr-item-row:last-child { border-bottom: none; }
 .last-receipt .lr-cat { width: 100%; padding: 8px; border: 1px solid #ff9800; border-radius: 6px; font-size: 13px; margin-top: 10px; background: white; }
 .last-receipt .lr-qr { font-family: monospace; font-size: 10px; color: #888; background: #eee; padding: 8px; border-radius: 4px; margin-top: 8px; word-break: break-all; }
-.last-receipt .lr-actions { margin-top: 10px; display: flex; gap: 8px; }
-.last-receipt .lr-actions button { flex: 1; padding: 8px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; }
 
 .receipts-list { margin-top: 8px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
 .receipts-list.expanded { max-height: 8000px; }
@@ -149,7 +147,28 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <div class="stats-small" id="statsSmall"></div>
 </div>
 
-<div class="footer">v15.3 | Локальный+Tailscale · авто-отправка · «От кого» запоминается</div>
+<div class="footer">v15.5 | offline-first · имя при первом запуске · домен→IP</div>
+
+<div class="modal-overlay" id="setupModal">
+  <div class="modal" style="max-width: 420px;">
+    <div class="modal-header">
+      <span>👋 Первый запуск</span>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom: 10px; font-size: 14px;">Кто будет сканировать чеки с этого телефона?</p>
+      <input id="setupName" type="text" placeholder="например: lambert"
+             style="width:100%; padding:12px; border:1px solid #ccc; border-radius:6px; font-size:16px;"
+             autocapitalize="none" autocorrect="off" spellcheck="false">
+      <div class="hint" style="font-size:11px; color:#888; margin-top:6px;">
+        Латиница, цифры, _ и -. Файлы уйдут в 1-inbox/&lt;имя&gt;/ на NAS.
+      </div>
+      <div id="setupError" style="color:#c62828; font-size:13px; margin-top:8px; display:none;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="button btn-sm btn-scan" onclick="saveSetupName()">💾 Сохранить</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-overlay" id="logModal">
   <div class="modal">
@@ -175,13 +194,9 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
     </div>
     <div class="modal-body">
       <div class="settings-group">
-        <label>👤 Кто сканирует (запоминается на этом телефоне)</label>
-        <select id="senderUser">
-          <option value="lambert">lambert</option>
-          <option value="mama">mama</option>
-          <option value="papa">papa</option>
-        </select>
-        <div class="hint">Файл уйдёт в папку 1-inbox/&lt;имя&gt;/ на NAS. Выбор сохраняется автоматически.</div>
+        <label>👤 Кто сканирует с этого телефона</label>
+        <div id="senderDisplay" style="padding:10px; background:#f5f5f5; border-radius:6px; font-size:14px; font-weight:bold;">—</div>
+        <div class="hint">Чтобы сменить — «Очистить все чеки и кэш» в самом низу.</div>
       </div>
 
       <div class="settings-group">
@@ -226,9 +241,10 @@ const DAILY_API_LIMIT = 15;
 const AUTO_RETRY_MINUTES = 2;
 const LOCAL_TIMEOUT_MS = 3000;
 
-// v15.3: dual-URL (локальный + Tailscale). Локальный Caddy — задача на будущее.
+// v15.5: dual-URL (домен → IP), порядок важен для TLS-сертификата
 const SENDER_URLS = [
   'https://synology-flat11.taila10dc4.ts.net:8443/upload',
+  'https://192.168.10.22:8443/upload',
 ];
 
 const CATEGORIES = [
@@ -264,39 +280,76 @@ function getReceipts() { return JSON.parse(localStorage.getItem('receipts') || '
 function setReceipts(a) { localStorage.setItem('receipts', JSON.stringify(a)); }
 function getCache() { return JSON.parse(localStorage.getItem('receipts_cache') || '{}'); }
 function setCache(o) { localStorage.setItem('receipts_cache', JSON.stringify(o)); }
-function getSenderUser() { return localStorage.getItem('sender_user') || 'lambert'; }
+
+// === v15.5: имя отправителя — одно на устройство, задаётся при первом запуске ===
+function getSenderUser() { return localStorage.getItem('sender_user') || ''; }
 function setSenderUser(u) { localStorage.setItem('sender_user', u); }
+
+function validateSenderName(name) {
+  if (!name) return 'Пустое имя';
+  if (!/^[a-z0-9_-]+$/.test(name)) return 'Только a-z, 0-9, _, - (без пробелов и русских букв)';
+  if (name.length > 32) return 'Слишком длинное (макс 32)';
+  return null;
+}
+
+function showSetupIfNeeded() {
+  const modal = document.getElementById('setupModal');
+  if (!modal) return false;
+  if (getSenderUser()) {
+    modal.classList.remove('active');
+    return false;
+  }
+  modal.classList.add('active');
+  setTimeout(() => {
+    const inp = document.getElementById('setupName');
+    if (inp) inp.focus();
+  }, 100);
+  return true;
+}
+
+function saveSetupName() {
+  const input = document.getElementById('setupName');
+  const errEl = document.getElementById('setupError');
+  const clean = (input.value || '').trim().toLowerCase();
+  const err = validateSenderName(clean);
+  if (err) {
+    errEl.textContent = '❌ ' + err;
+    errEl.style.display = 'block';
+    return;
+  }
+  setSenderUser(clean);
+  errEl.style.display = 'none';
+  document.getElementById('setupModal').classList.remove('active');
+  addLog('👤 Отправитель: ' + clean, 'success');
+  updateCacheInfo();
+}
 
 // =====================================================================
 // СТАРТ
 // =====================================================================
 window.onload = function () {
-  // Восстанавливаем «от кого»
-  const savedUser = getSenderUser();
-  const selectEl = document.getElementById('senderUser');
-  if (selectEl) selectEl.value = savedUser;
-  // Обработчик смены — сохраняем
-  if (selectEl) {
-    selectEl.addEventListener('change', function () {
-      setSenderUser(this.value);
-      addLog('👤 Отправитель: ' + this.value, 'info');
+  // Первый запуск — модалка имени
+  showSetupIfNeeded();
+  const setupInput = document.getElementById('setupName');
+  if (setupInput) {
+    setupInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') saveSetupName();
     });
   }
 
   renderLastReceipt();
   renderReceiptsList();
   updateCacheInfo();
-  addLog('✅ Сканер готов (v15.3), отправитель: ' + savedUser, 'success');
+  addLog('✅ Сканер готов (v15.5), отправитель: ' + (getSenderUser() || '(не задан)'), 'success');
   registerSW();
 
-  // Автосинк — только если есть pending
-  if (navigator.onLine) {
+  if (navigator.onLine && getSenderUser()) {
     const pending = getReceipts().filter(r => r.status === 'pending').length;
     if (pending > 0) {
       addLog('🌐 Найдено pending: ' + pending + ', проверю через 2 сек', 'info');
       setTimeout(autoSync, 2000);
     }
-  } else {
+  } else if (!navigator.onLine) {
     addLog('📴 Офлайн: чеки сохранятся', 'info');
   }
   startAutoRetryTimer();
@@ -304,11 +357,13 @@ window.onload = function () {
 
 window.addEventListener('online', () => {
   addLog('🌐 Сеть появилась', 'success');
+  if (!getSenderUser()) return;
   const pending = getReceipts().filter(r => r.status === 'pending').length;
   if (pending > 0) setTimeout(autoSync, 1500);
 });
 
 async function autoSync() {
+  if (!getSenderUser()) return;
   try {
     await retryPending(false);
     await sendTo1C(false, true);
@@ -320,7 +375,7 @@ async function autoSync() {
 function startAutoRetryTimer() {
   if (autoRetryIntervalId) return;
   autoRetryIntervalId = setInterval(() => {
-    if (!navigator.onLine) return;
+    if (!navigator.onLine || !getSenderUser()) return;
     const receipts = getReceipts();
     const unsent = receipts.filter(r => r.status === 'ok' && !r.sent).length;
     const pending = receipts.filter(r => r.status === 'pending').length;
@@ -340,6 +395,7 @@ function registerSW() {
 function toggleScan() { scanning ? stopScan() : startScan(); }
 
 function startScan() {
+  if (!getSenderUser()) { showSetupIfNeeded(); return; }
   navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
     .then(function (mediaStream) {
       stream = mediaStream;
@@ -609,6 +665,13 @@ async function tryPost(url, txt, filename, user) {
 }
 
 async function sendTo1C(includeSent, silent) {
+  const user = getSenderUser();
+  if (!user) {
+    if (!silent) alert('⚠️ Сначала задайте имя отправителя');
+    showSetupIfNeeded();
+    return;
+  }
+
   let receipts = getReceipts();
   const toSend = includeSent
     ? receipts.filter(r => r.status === 'ok')
@@ -622,7 +685,6 @@ async function sendTo1C(includeSent, silent) {
     if (!silent) alert('📴 Нет сети.');
     return;
   }
-  const user = getSenderUser();
   const txt = build1CText(toSend);
   const dateStr = new Date().toISOString().slice(0, 10);
   const filename = '1C_Чеки_' + dateStr + '_' + Date.now() + '.txt';
@@ -687,7 +749,7 @@ function exportTo1C() {
 }
 
 // =====================================================================
-// ПОСЛЕДНИЙ ЧЕК (раскрытый полностью)
+// ПОСЛЕДНИЙ ЧЕК
 // =====================================================================
 function toggleLastSection() {
   lastSectionExpanded = !lastSectionExpanded;
@@ -755,7 +817,7 @@ function renderLastReceipt() {
 }
 
 // =====================================================================
-// ОСТАЛЬНЫЕ ЧЕКИ (шторка: неотправленные + pending + отправленные)
+// ОСТАЛЬНЫЕ ЧЕКИ
 // =====================================================================
 function toggleReceiptsSection() {
   receiptsExpanded = !receiptsExpanded;
@@ -775,15 +837,11 @@ function renderReceiptsList() {
   const list = document.getElementById('receiptsList');
   const title = document.getElementById('receiptsTitle');
 
-  // Остальные = все, кроме последнего
   const others = receipts.slice(0, receipts.length - 1);
 
-  // Сортируем: сначала pending, потом неотправленные ok, потом отправленные
   const pendingList = others.filter(r => r.status === 'pending');
   const unsentList = others.filter(r => r.status === 'ok' && !r.sent);
   const sentList = others.filter(r => r.sent);
-  const orderedOthers = pendingList.concat(unsentList).concat(sentList);
-  // Внутри каждой группы — свежие сверху
   const orderedReversed = pendingList.slice().reverse()
     .concat(unsentList.slice().reverse())
     .concat(sentList.slice().reverse());
@@ -802,7 +860,6 @@ function renderReceiptsList() {
     const realIndex = receipts.indexOf(receipt);
 
     if (expandedIndex === realIndex) {
-      // Раскрытая карточка
       const div = document.createElement('div');
       div.className = 'receipt-detail';
       if (receipt.status === 'pending') div.classList.add('pending');
@@ -817,7 +874,7 @@ function renderReceiptsList() {
       if (receipt.inn) html += '<div class="info">📋 ИНН: ' + receipt.inn + '</div>';
       if (receipt.address) html += '<div class="info">📍 ' + receipt.address + '</div>';
       if (receipt.checkNumber) html += '<div class="info">🧾 Чек № ' + receipt.checkNumber + '</div>';
-      if (receipt.cashier) html += '<div class="info">👤 ' + receipt.cashier + '</div>';
+      if (receipt.cashier) html += '<div class="info">👤 Кассир: ' + receipt.cashier + '</div>';
       if (receipt.paymentMethod) {
         html += '<div class="info">💰 ' + getPaymentMethodName(receipt.paymentMethod) + '</div>';
       }
@@ -846,7 +903,6 @@ function renderReceiptsList() {
       };
       list.appendChild(div);
     } else {
-      // Компактная строка
       const div = document.createElement('div');
       div.className = 'receipt-row';
       if (receipt.status === 'pending') div.classList.add('pending');
@@ -931,7 +987,7 @@ function updateCacheInfo() {
   document.getElementById('statsSmall').innerHTML =
     (navigator.onLine ? '🌐 Онлайн' : '📴 Офлайн') +
     ' | ✅ Отправлено: <b>' + sentCount + '</b>' +
-    ' | 👤 <b>' + getSenderUser() + '</b>';
+    ' | 👤 <b>' + (getSenderUser() || '—') + '</b>';
 
   const sendBtn = document.getElementById('sendBtn');
   if (unsentCount > 0) {
@@ -951,9 +1007,9 @@ function updateCacheInfo() {
 
   const diag = document.getElementById('diagInfo');
   if (diag) {
-    diag.innerHTML = 'Отправитель: ' + getSenderUser() +
+    diag.innerHTML = 'Отправитель: ' + (getSenderUser() || '(не задан)') +
       '<br><br>Адреса (по очереди):<br>1. ' + SENDER_URLS[0] + '<br>2. ' + SENDER_URLS[1] +
-      '<br><br>Версия: v15.3<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
+      '<br><br>Версия: v15.5<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
   }
 }
 
@@ -1018,6 +1074,8 @@ function clearLog() {
 // =====================================================================
 function openSettings() {
   updateCacheInfo();
+  const disp = document.getElementById('senderDisplay');
+  if (disp) disp.textContent = getSenderUser() || '(не задан)';
   document.getElementById('settingsModal').classList.add('active');
 }
 
@@ -1042,21 +1100,23 @@ function addManual() {
 }
 
 // =====================================================================
-// ОЧИСТКА ВСЕГО
+// ОЧИСТКА ВСЕГО (включая имя отправителя)
 // =====================================================================
 function clearCodes() {
   let receipts = getReceipts();
-  if (receipts.length === 0) { alert('Нет чеков для удаления'); return; }
-  if (confirm('⚠️ Удалить ВСЕ ' + receipts.length + ' чеков и кэш?\n\nЭто действие нельзя отменить!')) {
+  if (receipts.length === 0 && !getSenderUser()) { alert('Нечего удалять'); return; }
+  if (confirm('⚠️ Удалить ВСЕ чеки, кэш И имя отправителя?\n\nПосле этого нужно будет заново ввести имя. Это действие нельзя отменить!')) {
     localStorage.removeItem('receipts');
     localStorage.removeItem('receipts_cache');
     localStorage.removeItem('daily_stats');
+    localStorage.removeItem('sender_user');
     expandedIndex = null;
     receiptsExpanded = false;
     renderAll();
     closeSettings();
-    addLog('🗑️ Все чеки и кэш удалены', 'success');
-    alert('✅ Все чеки удалены!');
+    addLog('🗑️ Все чеки, кэш и имя удалены', 'success');
+    alert('✅ Очищено. Сейчас нужно будет заново ввести имя.');
+    showSetupIfNeeded();
   }
 }
 
