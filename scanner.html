@@ -1044,7 +1044,7 @@ function updateCacheInfo() {
     const u = getSenderUser();
     diag.innerHTML = 'Отправитель: ' + (d || '(не задан)') +
       (d && d !== u ? ' (папка: ' + u + ')' : '') +
-      '<br><br>Адреса (по очереди):<br>1. ' + SENDER_URLS[0] + '<br>2. ' + SENDER_URLS[1] +
+      '<br><br>Адрес отправки:<br>' + SENDER_URLS[0] +
       '<br><br>Версия: v15.6<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
   }
 }
