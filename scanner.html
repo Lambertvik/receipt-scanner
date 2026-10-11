@@ -147,7 +147,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <div class="stats-small" id="statsSmall"></div>
 </div>
 
-<div class="footer">v15.5 | offline-first · имя при первом запуске · домен→IP</div>
+<div class="footer">v15.6 | offline-first · имя с транслитом · домен→IP</div>
 
 <div class="modal-overlay" id="setupModal">
   <div class="modal" style="max-width: 420px;">
@@ -156,11 +156,11 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
     </div>
     <div class="modal-body">
       <p style="margin-bottom: 10px; font-size: 14px;">Кто будет сканировать чеки с этого телефона?</p>
-      <input id="setupName" type="text" placeholder="например: lambert"
+      <input id="setupName" type="text" placeholder="например: Мама или lambert"
              style="width:100%; padding:12px; border:1px solid #ccc; border-radius:6px; font-size:16px;"
              autocapitalize="none" autocorrect="off" spellcheck="false">
       <div class="hint" style="font-size:11px; color:#888; margin-top:6px;">
-        Латиница, цифры, _ и -. Файлы уйдут в 1-inbox/&lt;имя&gt;/ на NAS.
+        Можно по-русски: «Мама» → папка <code>1-inbox/mama/</code>. В папку уходит транслит.
       </div>
       <div id="setupError" style="color:#c62828; font-size:13px; margin-top:8px; display:none;"></div>
     </div>
@@ -241,7 +241,7 @@ const DAILY_API_LIMIT = 15;
 const AUTO_RETRY_MINUTES = 2;
 const LOCAL_TIMEOUT_MS = 3000;
 
-// v15.5: dual-URL (домен → IP), порядок важен для TLS-сертификата
+// v15.6: dual-URL (домен → IP), порядок важен для TLS-сертификата
 const SENDER_URLS = [
   'https://synology-flat11.taila10dc4.ts.net:8443/upload',
   'https://192.168.10.22:8443/upload',
@@ -281,15 +281,47 @@ function setReceipts(a) { localStorage.setItem('receipts', JSON.stringify(a)); }
 function getCache() { return JSON.parse(localStorage.getItem('receipts_cache') || '{}'); }
 function setCache(o) { localStorage.setItem('receipts_cache', JSON.stringify(o)); }
 
-// === v15.5: имя отправителя — одно на устройство, задаётся при первом запуске ===
+// === v15.6: имя отправителя — одно на устройство, задаётся при первом запуске ===
+// slug (sender_user) — то, что уходит в папку 1-inbox/<slug>/ на NAS
+// display (sender_display) — то, что показываем пользователю
 function getSenderUser() { return localStorage.getItem('sender_user') || ''; }
 function setSenderUser(u) { localStorage.setItem('sender_user', u); }
 
-function validateSenderName(name) {
-  if (!name) return 'Пустое имя';
-  if (!/^[a-z0-9_-]+$/.test(name)) return 'Только a-z, 0-9, _, - (без пробелов и русских букв)';
-  if (name.length > 32) return 'Слишком длинное (макс 32)';
-  return null;
+function getSenderDisplay() {
+  const d = localStorage.getItem('sender_display');
+  const u = getSenderUser();
+  return d || u || '';
+}
+
+// === v15.6: транслитерация для папки на NAS ===
+const TRANSLIT_MAP = {
+  'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z',
+  'и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r',
+  'с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sch',
+  'ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'
+};
+
+function transliterate(str) {
+  const lower = String(str).toLowerCase();
+  let out = '';
+  for (const ch of lower) {
+    if (TRANSLIT_MAP[ch] !== undefined) out += TRANSLIT_MAP[ch];
+    else if (/[a-z0-9_-]/.test(ch)) out += ch;
+    else if (/\s/.test(ch)) out += '_';
+  }
+  return out.replace(/_+/g, '_').replace(/^_|_$/g, '');
+}
+
+// Готовит имя к сохранению: { slug, display } или { error }
+function prepareSender(rawInput) {
+  const raw = String(rawInput || '').trim();
+  if (!raw) return { error: 'Пустое имя' };
+  if (raw.length > 50) return { error: 'Слишком длинное (макс 50)' };
+  if (/[\/\\:*?"<>|]/.test(raw)) return { error: 'Запрещены символы / \\ : * ? " < > |' };
+  const slug = transliterate(raw);
+  if (!slug) return { error: 'Не удалось получить имя папки — используйте буквы/цифры' };
+  if (slug.length > 32) return { error: 'Имя папки слишком длинное (макс 32)' };
+  return { slug, display: raw };
 }
 
 function showSetupIfNeeded() {
@@ -310,17 +342,20 @@ function showSetupIfNeeded() {
 function saveSetupName() {
   const input = document.getElementById('setupName');
   const errEl = document.getElementById('setupError');
-  const clean = (input.value || '').trim().toLowerCase();
-  const err = validateSenderName(clean);
-  if (err) {
-    errEl.textContent = '❌ ' + err;
+  const prep = prepareSender(input.value);
+  if (prep.error) {
+    errEl.textContent = '❌ ' + prep.error;
     errEl.style.display = 'block';
     return;
   }
-  setSenderUser(clean);
+  localStorage.setItem('sender_user', prep.slug);
+  localStorage.setItem('sender_display', prep.display);
   errEl.style.display = 'none';
   document.getElementById('setupModal').classList.remove('active');
-  addLog('👤 Отправитель: ' + clean, 'success');
+  const msg = (prep.display === prep.slug)
+    ? '👤 Отправитель: ' + prep.slug
+    : '👤 Отправитель: ' + prep.display + ' (папка: ' + prep.slug + ')';
+  addLog(msg, 'success');
   updateCacheInfo();
 }
 
@@ -328,7 +363,6 @@ function saveSetupName() {
 // СТАРТ
 // =====================================================================
 window.onload = function () {
-  // Первый запуск — модалка имени
   showSetupIfNeeded();
   const setupInput = document.getElementById('setupName');
   if (setupInput) {
@@ -340,7 +374,7 @@ window.onload = function () {
   renderLastReceipt();
   renderReceiptsList();
   updateCacheInfo();
-  addLog('✅ Сканер готов (v15.5), отправитель: ' + (getSenderUser() || '(не задан)'), 'success');
+  addLog('✅ Сканер готов (v15.6), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
   registerSW();
 
   if (navigator.onLine && getSenderUser()) {
@@ -987,7 +1021,7 @@ function updateCacheInfo() {
   document.getElementById('statsSmall').innerHTML =
     (navigator.onLine ? '🌐 Онлайн' : '📴 Офлайн') +
     ' | ✅ Отправлено: <b>' + sentCount + '</b>' +
-    ' | 👤 <b>' + (getSenderUser() || '—') + '</b>';
+    ' | 👤 <b>' + (getSenderDisplay() || '—') + '</b>';
 
   const sendBtn = document.getElementById('sendBtn');
   if (unsentCount > 0) {
@@ -1007,9 +1041,12 @@ function updateCacheInfo() {
 
   const diag = document.getElementById('diagInfo');
   if (diag) {
-    diag.innerHTML = 'Отправитель: ' + (getSenderUser() || '(не задан)') +
+    const d = getSenderDisplay();
+    const u = getSenderUser();
+    diag.innerHTML = 'Отправитель: ' + (d || '(не задан)') +
+      (d && d !== u ? ' (папка: ' + u + ')' : '') +
       '<br><br>Адреса (по очереди):<br>1. ' + SENDER_URLS[0] + '<br>2. ' + SENDER_URLS[1] +
-      '<br><br>Версия: v15.5<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
+      '<br><br>Версия: v15.6<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
   }
 }
 
@@ -1075,7 +1112,17 @@ function clearLog() {
 function openSettings() {
   updateCacheInfo();
   const disp = document.getElementById('senderDisplay');
-  if (disp) disp.textContent = getSenderUser() || '(не задан)';
+  if (disp) {
+    const d = getSenderDisplay();
+    const u = getSenderUser();
+    if (!u) {
+      disp.textContent = '(не задан)';
+    } else if (d && d !== u) {
+      disp.innerHTML = d + ' <span style="color:#888;font-weight:normal;font-size:12px;">(папка: ' + u + ')</span>';
+    } else {
+      disp.textContent = u;
+    }
+  }
   document.getElementById('settingsModal').classList.add('active');
 }
 
@@ -1110,6 +1157,7 @@ function clearCodes() {
     localStorage.removeItem('receipts_cache');
     localStorage.removeItem('daily_stats');
     localStorage.removeItem('sender_user');
+    localStorage.removeItem('sender_display');
     expandedIndex = null;
     receiptsExpanded = false;
     renderAll();
