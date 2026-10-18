@@ -248,14 +248,15 @@ const SENDER_URLS = [
 
 const CATEGORIES = [
   { id: "uncategorized", name: "Без категории" },
-  { id: "products", name: "Продукты питания" },      // <-- Меняем "Продукты" на "Продукты питания"
-  { id: "construction", name: "Стройматериалы / Расходники" }, // <-- Полное имя
+  { id: "products", name: "Продукты" },      // Убрали "питания"
+  { id: "construction", name: "Стройматериалы / Расходники" },
   { id: "fuel", name: "Авто" },
-  { id: "pharmacy", name: "Аптека / Медицина" },      // <-- Полное имя
-  { id: "household", name: "Бытовые товары / Хозтовары" }, // <-- Полное имя
+  { id: "pharmacy", name: "Аптека / Медицина" },
+  { id: "household", name: "Бытовые товары / Хозтовары" },
   { id: "clothes", name: "Одежда" },
-  { id: "electronics", name: "Электроника и Техника" }, // <-- Полное имя
-  { id: "services", name: "Услуги" }
+  { id: "electronics", name: "Электроника и Техника" },
+  { id: "services", name: "Услуги" },
+  { id: "other", name: "Прочее (Запасы)" } // Добавили на всякий случай
 ];
 
 let isProcessing = false;
