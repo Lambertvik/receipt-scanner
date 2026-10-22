@@ -147,7 +147,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <div class="stats-small" id="statsSmall"></div>
 </div>
 
-<div class="footer">v15.6 | offline-first · имя с транслитом · домен→IP</div>
+<div class="footer">v15.7 | offline-first · категории с GitHub</div>
 
 <div class="modal-overlay" id="setupModal">
   <div class="modal" style="max-width: 420px;">
@@ -209,13 +209,15 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
       <div class="settings-group">
         <label>📂 Категории и ключевые слова</label>
         <textarea id="categoriesInput" rows="10" placeholder="Формат: Название|ключ1,ключ2,ключ3&#10;Пример: Продукты|творог,сметана,молоко" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-family:monospace; font-size:12px; resize:vertical;"></textarea>
-        <button class="button btn-sm btn-secondary" onclick="saveCategories()">💾 Сохранить категории</button>
+        <button class="button btn-sm btn-secondary" onclick="saveCategories()">💾 Сохранить локально</button>
+        <button class="button btn-sm" style="background:#673AB7;color:white;" onclick="loadCategoriesFromServer()">☁️ Скачать с GitHub</button>
+        <button class="button btn-sm" style="background:#4CAF50;color:white;" onclick="exportCategories()">📤 Экспорт (JSON)</button>
         <div class="hint">Каждая строка — новая категория. Ключевые слова через запятую.</div>
       </div>
 
       <div class="settings-group">
         <label>💾 Формат выгрузки</label>
-        <select id="exportFormatSelect" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-size:14px;">
+        <select id="exportFormatSelect" onchange="saveExportFormat()" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-size:14px;">
           <option value="txt">Текст (TXT) — для текущей 1С</option>
           <option value="json">JSON — для будущих интеграций</option>
         </select>
@@ -256,9 +258,11 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 <script src="jsQR.js"></script>
 <script>
 // =====================================================================
-// ЗАГРУЗКА ДИНАМИЧЕСКИХ НАСТРОЕК
+// КОНФИГ И НАСТРОЙКИ
 // =====================================================================
 const DEFAULT_API_TOKEN = "53441.ZLqLc0Gvo8gziNZXF";
+const CATEGORIES_URL = 'https://lambertvik.github.io/receipt-scanner/categories.json';
+
 let currentApiToken = localStorage.getItem('api_token') || DEFAULT_API_TOKEN;
 
 let currentCategories = JSON.parse(localStorage.getItem('custom_categories') || '[]');
@@ -383,24 +387,126 @@ function saveSetupName() {
 // =====================================================================
 function autoDetectCategory(items) {
   if (!items || items.length === 0) return 'uncategorized';
-  
-  // Берем названия всех товаров, объединяем в строку в нижнем регистре
   const allNames = items.map(item => String(item.name || '').toLowerCase()).join(' ');
-  
   for (const cat of currentCategories) {
     if (!cat.keywords || cat.keywords.length === 0) continue;
     for (const kw of cat.keywords) {
-      if (allNames.includes(kw)) {
-        return cat.id; // Нашли совпадение!
-      }
+      if (allNames.includes(kw)) return cat.id;
     }
   }
-  return 'uncategorized'; // Если ничего не нашли
+  return 'uncategorized';
 }
 
 function getCategoryName(categoryId) {
   const cat = currentCategories.find(c => c.id === categoryId);
   return cat ? cat.name : 'Без категории';
+}
+
+// =====================================================================
+// РАБОТА С КАТЕГОРИЯМИ (СЕРВЕР / ЭКСПОРТ)
+// =====================================================================
+async function loadCategoriesFromServer() {
+  if (!navigator.onLine) { addLog('📴 Офлайн: используем локальные категории', 'info'); return; }
+  try {
+    addLog('📥 Обновление категорий с GitHub...', 'info');
+    const response = await fetch(CATEGORIES_URL + '?t=' + Date.now());
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const newCats = await response.json();
+    if (Array.isArray(newCats) && newCats.length > 0) {
+      currentCategories = newCats;
+      localStorage.setItem('custom_categories', JSON.stringify(currentCategories));
+      addLog('✅ Категории обновлены с GitHub (' + newCats.length + ')', 'success');
+      renderAll();
+    }
+  } catch (e) {
+    addLog('⚠️ Не удалось обновить категории: ' + e.message, 'info');
+  }
+}
+
+function exportCategories() {
+  const json = JSON.stringify(currentCategories, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'categories.json';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  alert('✅ Файл categories.json скачан. Закоммитьте его в GitHub.');
+}
+
+function saveExportFormat() {
+  const sel = document.getElementById('exportFormatSelect');
+  if (!sel) return;
+  localStorage.setItem('export_format', sel.value);
+  addLog('💾 Формат выгрузки: ' + sel.value.toUpperCase(), 'success');
+}
+
+function loadExportFormat() {
+  const sel = document.getElementById('exportFormatSelect');
+  if (!sel) return;
+  const saved = localStorage.getItem('export_format') || 'txt';
+  sel.value = saved;
+}
+
+// =====================================================================
+// ПРЕДЛОЖЕНИЕ КАТЕГОРИИ ДЛЯ НОВОГО ТОВАРА
+// =====================================================================
+function promptForCategory(receiptIndex, itemName) {
+  let options = currentCategories.filter(c => c.id !== 'uncategorized').map(c => c.name);
+  let msg = 'Товар: "' + itemName + '"\n\nВыберите категорию (введите номер):\n';
+  options.forEach((name, i) => { msg += (i + 1) + '. ' + name + '\n'; });
+  msg += '0. Создать новую категорию\n';
+  
+  const choice = prompt(msg);
+  if (choice === null) return;
+  
+  let selectedCat = null;
+  
+  if (choice === '0') {
+    const newName = prompt('Введите название новой категории:');
+    if (!newName) return;
+    const keywordsStr = prompt('Введите ключевые слова через запятую:');
+    const keywords = keywordsStr ? keywordsStr.split(',').map(k => k.trim().toLowerCase()).filter(k => k) : [];
+    
+    const newId = newName.toLowerCase().replace(/[^a-zа-я0-9]/g, '_');
+    selectedCat = { id: newId, name: newName, keywords: keywords };
+    currentCategories.push(selectedCat);
+    localStorage.setItem('custom_categories', JSON.stringify(currentCategories));
+    addLog('➕ Создана категория: ' + newName, 'success');
+  } else {
+    const idx = parseInt(choice) - 1;
+    if (idx >= 0 && idx < options.length) {
+      selectedCat = currentCategories.find(c => c.name === options[idx]);
+    }
+  }
+  
+  if (selectedCat) {
+    let receipts = getReceipts();
+    if (receipts[receiptIndex]) {
+      receipts[receiptIndex].category = selectedCat.id;
+      setReceipts(receipts);
+      let cache = getCache();
+      const qr = receipts[receiptIndex].qr;
+      if (cache[qr]) {
+        cache[qr].category = selectedCat.id;
+        setCache(cache);
+      }
+      addLog('✅ "' + itemName + '" -> ' + selectedCat.name, 'success');
+      renderAll();
+      
+      if (confirm('Добавить "' + itemName.split(' ')[0] + '" в ключевые слова категории "' + selectedCat.name + '"?')) {
+        const firstWord = itemName.toLowerCase().split(' ')[0].replace(/[^a-zа-я0-9]/g, '');
+        if (firstWord && !selectedCat.keywords.includes(firstWord)) {
+          selectedCat.keywords.push(firstWord);
+          localStorage.setItem('custom_categories', JSON.stringify(currentCategories));
+          addLog('🔑 Добавлено слово: ' + firstWord, 'success');
+        }
+      }
+    }
+  }
 }
 
 // =====================================================================
@@ -418,12 +524,11 @@ window.onload = function () {
   renderLastReceipt();
   renderReceiptsList();
   updateCacheInfo();
-  addLog('✅ Сканер готов (v15.6), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
+  addLog('✅ Сканер готов (v15.7), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
   registerSW();
 
-  // Заполняем поле токена при запуске
-  const apiInput = document.getElementById('apiTokenInput');
-  if (apiInput) apiInput.value = currentApiToken;
+  loadExportFormat();
+  loadCategoriesFromServer();
 
   if (navigator.onLine && getSenderUser()) {
     const pending = getReceipts().filter(r => r.status === 'pending').length;
@@ -440,6 +545,7 @@ window.onload = function () {
 window.addEventListener('online', () => {
   addLog('🌐 Сеть появилась', 'success');
   if (!getSenderUser()) return;
+  loadCategoriesFromServer(); // Обновляем категории при появлении сети
   const pending = getReceipts().filter(r => r.status === 'pending').length;
   if (pending > 0) setTimeout(autoSync, 1500);
 });
@@ -597,6 +703,12 @@ async function handleScan(qrData) {
       if (upgraded) {
         if (navigator.vibrate) navigator.vibrate(200);
         addLog('✅ Чек расшифрован: ' + upgraded.items.length + ' тов.', 'success');
+        
+        // Проверяем, определилась ли категория
+        if (upgraded.category === 'uncategorized' && upgraded.items.length > 0) {
+          const itemName = upgraded.items[0].name;
+          setTimeout(() => { promptForCategory(receipts.length - 1, itemName); }, 200);
+        }
       }
     } else {
       addLog('⚠️ Ошибка API (code=' + data.code + ')', 'error');
@@ -702,8 +814,6 @@ async function retryPending(showAlert) {
 // =====================================================================
 // ОТПРАВКА НА NAS
 // =====================================================================
-
-// Генерация JSON (для будущих интеграций)
 function build1CJson(receipts) {
   const result = [];
   receipts.forEach(function (receipt) {
@@ -733,7 +843,6 @@ function build1CJson(receipts) {
   return JSON.stringify(result, null, 2);
 }
 
-// Генерация TXT (текущий формат)
 function build1CText(receipts) {
   let txtContent = '#1C:UNF\n';
   txtContent += '#Version:1.0\n';
@@ -1139,7 +1248,7 @@ function updateCacheInfo() {
     diag.innerHTML = 'Отправитель: ' + (d || '(не задан)') +
       (d && d !== u ? ' (папка: ' + u + ')' : '') +
       '<br><br>Адрес отправки:<br>' + SENDER_URLS[0] +
-      '<br><br>Версия: v15.6<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
+      '<br><br>Версия: v15.7<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
   }
 }
 
@@ -1217,16 +1326,16 @@ function openSettings() {
     }
   }
   
-  // Заполняем токен
   document.getElementById('apiTokenInput').value = currentApiToken;
   
-  // Заполняем категории
   let catText = "";
   currentCategories.forEach(cat => {
-      if (cat.id === 'uncategorized') return; // Пропускаем дефолтную
+      if (cat.id === 'uncategorized') return;
       catText += cat.name + "|" + cat.keywords.join(',') + "\n";
   });
   document.getElementById('categoriesInput').value = catText.trim();
+
+  loadExportFormat();
 
   document.getElementById('settingsModal').classList.add('active');
 }
@@ -1257,7 +1366,6 @@ function saveCategories() {
       if (parts.length < 2) continue;
       const name = parts[0].trim();
       const keywords = parts[1].split(',').map(k => k.trim().toLowerCase()).filter(k => k);
-      // Генерируем ID (латиница или просто хеш)
       let id = name.toLowerCase().replace(/[^a-zа-я0-9]/g, '_');
       if (!id) id = 'cat_' + Date.now();
       newCats.push({ id: id, name: name, keywords: keywords });
@@ -1268,7 +1376,6 @@ function saveCategories() {
       return;
   }
   
-  // Добавляем "Без категории" в начало
   newCats.unshift({ id: "uncategorized", name: "Без категории", keywords: [] });
   
   currentCategories = newCats;
