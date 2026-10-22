@@ -49,8 +49,9 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .last-receipt .lr-badge { font-size: 12px; margin-left: 6px; }
 .last-receipt .lr-info { color: #555; margin-bottom: 5px; word-break: break-word; line-height: 1.4; }
 .last-receipt .lr-items { background: white; padding: 10px; border-radius: 6px; margin-top: 8px; }
-.last-receipt .lr-item-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; font-size: 12px; }
+.last-receipt .lr-item-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; font-size: 12px; gap: 8px; }
 .last-receipt .lr-item-row:last-child { border-bottom: none; }
+.last-receipt .lr-item-cat { color: #888; font-size: 11px; margin-left: 4px; }
 .last-receipt .lr-cat { width: 100%; padding: 8px; border: 1px solid #ff9800; border-radius: 6px; font-size: 13px; margin-top: 10px; background: white; }
 .last-receipt .lr-qr { font-family: monospace; font-size: 10px; color: #888; background: #eee; padding: 8px; border-radius: 4px; margin-top: 8px; word-break: break-all; }
 
@@ -73,8 +74,9 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .receipt-detail .detail-sum { font-size: 18px; font-weight: bold; margin-bottom: 8px; }
 .receipt-detail .info { color: #555; margin-bottom: 4px; word-break: break-word; }
 .receipt-detail .items { background: white; padding: 8px; border-radius: 4px; margin-top: 6px; }
-.receipt-detail .item-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee; font-size: 12px; }
+.receipt-detail .item-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee; font-size: 12px; gap: 8px; }
 .receipt-detail .item-row:last-child { border-bottom: none; }
+.receipt-detail .item-cat { color: #888; font-size: 11px; margin-left: 4px; }
 .receipt-detail .cat-select { width: 100%; padding: 6px; border: 1px solid #ff9800; border-radius: 4px; font-size: 12px; margin-top: 8px; }
 .receipt-detail .qr-str { font-family: monospace; font-size: 10px; color: #888; background: #eee; padding: 6px; border-radius: 4px; margin-top: 8px; word-break: break-all; }
 
@@ -147,7 +149,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <div class="stats-small" id="statsSmall"></div>
 </div>
 
-<div class="footer">v15.7 | offline-first · категории с GitHub</div>
+<div class="footer">v16.0 | offline-first · категории для каждого товара</div>
 
 <div class="modal-overlay" id="setupModal">
   <div class="modal" style="max-width: 420px;">
@@ -269,14 +271,14 @@ let currentCategories = JSON.parse(localStorage.getItem('custom_categories') || 
 if (currentCategories.length === 0) {
     currentCategories = [
         { id: "uncategorized", name: "Без категории", keywords: [] },
-        { id: "products", name: "Продукты", keywords: ["творог", "сметана", "молоко", "хлеб", "сыр", "мясо", "яйцо", "масло", "кефир", "йогурт"] },
-        { id: "construction", name: "Стройматериалы / Расходники", keywords: ["цемент", "песок", "гвоздь", "шуруп", "саморез", "краска"] },
-        { id: "fuel", name: "Авто", keywords: ["бензин", "аи-92", "аи-95", "дизель", "топливо"] },
-        { id: "pharmacy", name: "Аптека / Медицина", keywords: ["таблетки", "лекарство", "мазь", "бинт", "пластырь"] },
-        { id: "household", name: "Бытовые товары / Хозтовары", keywords: ["порошок", "мыло", "шампунь", "губка", "паста"] },
-        { id: "clothes", name: "Одежда", keywords: ["футболка", "джинсы", "куртка", "носки", "обувь"] },
-        { id: "electronics", name: "Электроника и Техника", keywords: ["батарейка", "кабель", "зарядка", "наушники"] },
-        { id: "services", name: "Услуги", keywords: ["услуга", "ремонт", "доставка"] },
+        { id: "products", name: "Продукты", keywords: ["творог", "сметан", "молок", "хлеб", "сыр", "мяс", "яйц", "масл", "кефир", "йогурт"] },
+        { id: "construction", name: "Стройматериалы / Расходники", keywords: ["цемент", "песок", "гвозд", "шуруп", "саморез", "краск"] },
+        { id: "fuel", name: "Авто", keywords: ["бензин", "аи-92", "аи-95", "дизел", "топлив"] },
+        { id: "pharmacy", name: "Аптека / Медицина", keywords: ["таблетк", "лекарств", "маз", "бинт", "пластыр"] },
+        { id: "household", name: "Бытовые товары / Хозтовары", keywords: ["порошок", "мыл", "шампун", "губк", "паст", "бритв", "насадк"] },
+        { id: "clothes", name: "Одежда", keywords: ["футболк", "джинс", "куртк", "носк", "обув"] },
+        { id: "electronics", name: "Электроника и Техника", keywords: ["батарейк", "кабел", "зарядк", "наушник"] },
+        { id: "services", name: "Услуги", keywords: ["услуг", "ремонт", "доставк"] },
         { id: "other", name: "Прочее (Запасы)", keywords: [] }
     ];
     localStorage.setItem('custom_categories', JSON.stringify(currentCategories));
@@ -383,7 +385,7 @@ function saveSetupName() {
 }
 
 // =====================================================================
-// АВТОМАТИЧЕСКОЕ ОПРЕДЕЛЕНИЕ КАТЕГОРИИ
+// АВТОМАТИЧЕСКОЕ ОПРЕДЕЛЕНИЕ КАТЕГОРИИ (ДЛЯ КАЖДОГО ТОВАРА)
 // =====================================================================
 function autoDetectCategory(items) {
   if (!items || items.length === 0) return 'uncategorized';
@@ -452,9 +454,9 @@ function loadExportFormat() {
 }
 
 // =====================================================================
-// ПРЕДЛОЖЕНИЕ КАТЕГОРИИ ДЛЯ НОВОГО ТОВАРА
+// ПРЕДЛОЖЕНИЕ КАТЕГОРИИ ДЛЯ НОВОГО ТОВАРА (ВНУТРИ ЧЕКА)
 // =====================================================================
-function promptForCategory(receiptIndex, itemName) {
+function promptForItemCategory(receiptIndex, itemIndex, itemName) {
   let options = currentCategories.filter(c => c.id !== 'uncategorized').map(c => c.name);
   let msg = 'Товар: "' + itemName + '"\n\nВыберите категорию (введите номер):\n';
   options.forEach((name, i) => { msg += (i + 1) + '. ' + name + '\n'; });
@@ -485,13 +487,19 @@ function promptForCategory(receiptIndex, itemName) {
   
   if (selectedCat) {
     let receipts = getReceipts();
-    if (receipts[receiptIndex]) {
-      receipts[receiptIndex].category = selectedCat.id;
+    if (receipts[receiptIndex] && receipts[receiptIndex].items[itemIndex]) {
+      receipts[receiptIndex].items[itemIndex].category = selectedCat.id;
+      
+      // Пересчитываем общую категорию чека
+      const cats = new Set(receipts[receiptIndex].items.map(i => i.category));
+      receipts[receiptIndex].category = cats.size === 1 ? [...cats][0] : 'mixed';
+      
       setReceipts(receipts);
       let cache = getCache();
       const qr = receipts[receiptIndex].qr;
       if (cache[qr]) {
-        cache[qr].category = selectedCat.id;
+        cache[qr].items = receipts[receiptIndex].items;
+        cache[qr].category = receipts[receiptIndex].category;
         setCache(cache);
       }
       addLog('✅ "' + itemName + '" -> ' + selectedCat.name, 'success');
@@ -524,7 +532,7 @@ window.onload = function () {
   renderLastReceipt();
   renderReceiptsList();
   updateCacheInfo();
-  addLog('✅ Сканер готов (v15.7), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
+  addLog('✅ Сканер готов (v16.0), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
   registerSW();
 
   loadExportFormat();
@@ -545,7 +553,7 @@ window.onload = function () {
 window.addEventListener('online', () => {
   addLog('🌐 Сеть появилась', 'success');
   if (!getSenderUser()) return;
-  loadCategoriesFromServer(); // Обновляем категории при появлении сети
+  loadCategoriesFromServer();
   const pending = getReceipts().filter(r => r.status === 'pending').length;
   if (pending > 0) setTimeout(autoSync, 1500);
 });
@@ -704,10 +712,17 @@ async function handleScan(qrData) {
         if (navigator.vibrate) navigator.vibrate(200);
         addLog('✅ Чек расшифрован: ' + upgraded.items.length + ' тов.', 'success');
         
-        // Проверяем, определилась ли категория
-        if (upgraded.category === 'uncategorized' && upgraded.items.length > 0) {
-          const itemName = upgraded.items[0].name;
-          setTimeout(() => { promptForCategory(receipts.length - 1, itemName); }, 200);
+        // Проверяем, есть ли товары без категории, и предлагаем их выбрать
+        const uncategorizedItems = upgraded.items
+          .map((item, idx) => ({ item, idx }))
+          .filter(x => x.item.category === 'uncategorized');
+        
+        if (uncategorizedItems.length > 0) {
+          // Предлагаем для первого товара без категории (остальные будут в следующий раз)
+          const first = uncategorizedItems[0];
+          setTimeout(() => {
+            promptForItemCategory(receipts.length - 1, first.idx, first.item.name);
+          }, 200);
         }
       }
     } else {
@@ -741,16 +756,22 @@ function upgradeReceiptFromAPI(qrData, apiResponse) {
   receipts[idx].cashTotalSum = json.cashTotalSum ? parseFloat(json.cashTotalSum) / 100 : 0;
   receipts[idx].ecashTotalSum = json.ecashTotalSum ? parseFloat(json.ecashTotalSum) / 100 : 0;
   receipts[idx].paymentMethod = determinePaymentMethod(json.cashTotalSum, json.ecashTotalSum);
-  receipts[idx].items = (json.items || []).map(item => ({
-    name: String(item.name || 'Товар'),
-    quantity: item.quantity || 1,
-    price: item.price ? (parseFloat(item.price) / 100).toFixed(2) : '0.00',
-    sum: item.sum ? (parseFloat(item.sum) / 100).toFixed(2) : '0.00'
-  }));
+  receipts[idx].items = (json.items || []).map(item => {
+    const rawItem = {
+      name: String(item.name || 'Товар'),
+      quantity: item.quantity || 1,
+      price: item.price ? (parseFloat(item.price) / 100).toFixed(2) : '0.00',
+      sum: item.sum ? (parseFloat(item.sum) / 100).toFixed(2) : '0.00'
+    };
+    // Определяем категорию для КАЖДОГО товара
+    rawItem.category = autoDetectCategory([rawItem]);
+    return rawItem;
+  });
   
-  // АВТОМАТИЧЕСКОЕ ОПРЕДЕЛЕНИЕ КАТЕГОРИИ
-  receipts[idx].category = autoDetectCategory(receipts[idx].items);
-
+  // Вычисляем общую категорию чека
+  const cats = new Set(receipts[idx].items.map(i => i.category));
+  receipts[idx].category = cats.size === 1 ? [...cats][0] : 'mixed';
+  
   receipts[idx].status = 'ok';
   setReceipts(receipts);
   let cache = getCache();
@@ -821,7 +842,8 @@ function build1CJson(receipts) {
       name: String(item.name || 'Товар'),
       quantity: Number(item.quantity || 1),
       price: Number(item.price || 0),
-      sum: Number(item.sum || 0)
+      sum: Number(item.sum || 0),
+      category: getCategoryName(item.category || 'uncategorized')
     }));
     
     result.push({
@@ -833,8 +855,7 @@ function build1CJson(receipts) {
       checkNumber: receipt.checkNumber,
       shiftNumber: receipt.shiftNumber,
       cashier: receipt.cashier,
-      category: getCategoryName(receipt.category),
-      categoryId: receipt.category,
+      category: getCategoryName(receipt.category || 'uncategorized'),
       paymentMethod: receipt.paymentMethod,
       qr: receipt.qr,
       items: items
@@ -858,17 +879,20 @@ function build1CText(receipts) {
     const checkNum = String(receipt.checkNumber || '').replace(/;/g, ',');
     const shiftNum = String(receipt.shiftNumber || '').replace(/;/g, ',');
     const cashier = String(receipt.cashier || '').replace(/;/g, ',');
-    const category = getCategoryName(receipt.category || 'uncategorized');
     const paymentMethod = String(receipt.paymentMethod || 'unknown');
     const qr = String(receipt.qr || '').replace(/;/g, ',').replace(/"/g, '""');
+    
     if (receipt.items && receipt.items.length > 0) {
       receipt.items.forEach(function (item) {
+        // Берем категорию КОНКРЕТНОГО ТОВАРА
+        const category = getCategoryName(item.category || receipt.category || 'uncategorized');
         const name = String(item.name || 'Товар').replace(/;/g, ',').replace(/"/g, '""');
         const qty = String(item.quantity || 1);
         const price = String(item.price || '0.00');
         txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';"' + name + '";' + qty + ';' + price + ';' + qr + '\n';
       });
     } else {
+      const category = getCategoryName(receipt.category || 'uncategorized');
       txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';"Без детализации";1;' + total + ';' + qr + '\n';
     }
   });
@@ -1042,8 +1066,14 @@ function renderLastReceipt() {
   html += '</select>';
   if (receipt.items && receipt.items.length > 0) {
     html += '<div class="lr-items">';
-    receipt.items.forEach(item => {
-      html += '<div class="lr-item-row"><span>' + item.name + '</span><span>' + item.quantity + ' шт.</span><span style="font-weight:600;color:#4CAF50;">' + item.sum + ' ₽</span></div>';
+    receipt.items.forEach((item, itemIdx) => {
+      const itemCatName = getCategoryName(item.category || 'uncategorized');
+      html += '<div class="lr-item-row" style="cursor:pointer;" onclick="promptForItemCategory(' + realIndex + ', ' + itemIdx + ', \'' + item.name.replace(/'/g, "\\'") + '\')">';
+      html += '<span>' + item.name + '</span>';
+      html += '<span>' + item.quantity + ' шт.</span>';
+      html += '<span style="color:#4CAF50;font-weight:600;">' + item.sum + ' ₽</span>';
+      html += '</div>';
+      html += '<div style="font-size:11px;color:#888;margin-top:-4px;margin-bottom:4px;">' + itemCatName + '</div>';
     });
     html += '</div>';
   } else if (receipt.status === 'pending') {
@@ -1127,8 +1157,14 @@ function renderReceiptsList() {
       html += '</select>';
       if (receipt.items && receipt.items.length > 0) {
         html += '<div class="items">';
-        receipt.items.forEach(item => {
-          html += '<div class="item-row"><span>' + item.name + '</span><span>' + item.quantity + ' шт.</span><span style="font-weight:600;color:#4CAF50;">' + item.sum + ' ₽</span></div>';
+        receipt.items.forEach((item, itemIdx) => {
+          const itemCatName = getCategoryName(item.category || 'uncategorized');
+          html += '<div class="item-row" style="cursor:pointer;" onclick="event.stopPropagation();promptForItemCategory(' + realIndex + ', ' + itemIdx + ', \'' + item.name.replace(/'/g, "\\'") + '\')">';
+          html += '<span>' + item.name + '</span>';
+          html += '<span>' + item.quantity + ' шт.</span>';
+          html += '<span style="font-weight:600;color:#4CAF50;">' + item.sum + ' ₽</span>';
+          html += '</div>';
+          html += '<div style="font-size:11px;color:#888;margin-top:-4px;margin-bottom:4px;">' + itemCatName + '</div>';
         });
         html += '</div>';
       } else if (receipt.status === 'pending') {
@@ -1139,7 +1175,7 @@ function renderReceiptsList() {
       }
       div.innerHTML = html;
       div.onclick = (e) => {
-        if (e.target.closest('select') || e.target.closest('button')) return;
+        if (e.target.closest('select') || e.target.closest('button') || e.target.closest('.item-row')) return;
         toggleReceiptDetail(realIndex);
       };
       list.appendChild(div);
@@ -1192,13 +1228,22 @@ function updateCategory(index, categoryId) {
   let receipts = getReceipts();
   if (index >= 0 && index < receipts.length) {
     receipts[index].category = categoryId;
+    // Если пользователь вручную выбрал категорию для всего чека, применяем ко всем товарам
+    if (categoryId !== 'mixed' && categoryId !== 'uncategorized') {
+      receipts[index].items.forEach(item => {
+        if (item.category === 'uncategorized' || !item.category) {
+          item.category = categoryId;
+        }
+      });
+    }
     setReceipts(receipts);
     let cache = getCache();
     if (cache[receipts[index].qr]) {
       cache[receipts[index].qr].category = categoryId;
+      cache[receipts[index].qr].items = receipts[index].items;
       setCache(cache);
     }
-    addLog('✅ Категория: ' + getCategoryName(categoryId), 'success');
+    addLog('✅ Категория чека: ' + getCategoryName(categoryId), 'success');
   }
 }
 
@@ -1248,7 +1293,7 @@ function updateCacheInfo() {
     diag.innerHTML = 'Отправитель: ' + (d || '(не задан)') +
       (d && d !== u ? ' (папка: ' + u + ')' : '') +
       '<br><br>Адрес отправки:<br>' + SENDER_URLS[0] +
-      '<br><br>Версия: v15.7<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
+      '<br><br>Версия: v16.0<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
   }
 }
 
