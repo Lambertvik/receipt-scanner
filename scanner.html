@@ -890,7 +890,7 @@ function build1CText(receipts) {
         const name = String(item.name || 'Товар').replace(/;/g, ',').replace(/"/g, '""');
         const qty = String(item.quantity || 1);
         const price = String(item.price || '0.00');
-        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';"' + name + '";' + qty + ';' + price + ';' + qr + '\n';
+                txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';"' + name + '";' + qty + ';' + price + ';' + qr + ';v16.0\n';
       });
     } else {
       const category = getCategoryName(receipt.category || 'uncategorized');
