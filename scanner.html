@@ -107,7 +107,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .settings-group { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #eee; }
 .settings-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 .settings-group label { font-size: 13px; font-weight: bold; color: #333; display: block; margin-bottom: 6px; }
-.settings-group select, .settings-group textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+.settings-group select, .settings-group textarea, .settings-group input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
 .settings-group textarea { font-family: monospace; font-size: 12px; resize: vertical; min-height: 70px; }
 .settings-group .hint { font-size: 11px; color: #888; margin-top: 4px; }
 </style>
@@ -200,6 +200,28 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
       </div>
 
       <div class="settings-group">
+        <label>🔑 Токен API (proverkacheka.com)</label>
+        <input id="apiTokenInput" type="text" placeholder="Вставьте ваш токен" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-size:14px;" autocapitalize="none" autocorrect="off" spellcheck="false">
+        <button class="button btn-sm btn-secondary" onclick="saveApiToken()">💾 Сохранить токен</button>
+        <div class="hint">Без токена чеки не будут расшифровываться.</div>
+      </div>
+
+      <div class="settings-group">
+        <label>📂 Категории и ключевые слова</label>
+        <textarea id="categoriesInput" rows="10" placeholder="Формат: Название|ключ1,ключ2,ключ3&#10;Пример: Продукты|творог,сметана,молоко" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-family:monospace; font-size:12px; resize:vertical;"></textarea>
+        <button class="button btn-sm btn-secondary" onclick="saveCategories()">💾 Сохранить категории</button>
+        <div class="hint">Каждая строка — новая категория. Ключевые слова через запятую.</div>
+      </div>
+
+      <div class="settings-group">
+        <label>💾 Формат выгрузки</label>
+        <select id="exportFormatSelect" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-size:14px;">
+          <option value="txt">Текст (TXT) — для текущей 1С</option>
+          <option value="json">JSON — для будущих интеграций</option>
+        </select>
+      </div>
+
+      <div class="settings-group">
         <label>⌨️ Вставить строку чека вручную</label>
         <textarea id="manualQR" placeholder="t=20260318T112100&s=401.77&fn=...&i=...&fp=...&n=1"></textarea>
         <button class="button btn-sm" style="background:#3F51B5;color:white;margin-top:8px;" onclick="addManual()">➕ Добавить чек</button>
@@ -214,7 +236,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 
       <div class="settings-group">
         <label>💼 Экспорт файла (резерв)</label>
-        <button class="button btn-sm btn-secondary" onclick="exportTo1C()">Экспорт для 1С (TXT)</button>
+        <button class="button btn-sm btn-secondary" onclick="exportTo1C()">Экспорт для 1С</button>
         <div class="hint">Если отправка на NAS недоступна</div>
       </div>
 
@@ -234,30 +256,32 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 <script src="jsQR.js"></script>
 <script>
 // =====================================================================
-// КОНФИГ
+// ЗАГРУЗКА ДИНАМИЧЕСКИХ НАСТРОЕК
 // =====================================================================
-const API_TOKEN = "53441.ZLqLc0Gvo8gziNZXF";
+const DEFAULT_API_TOKEN = "53441.ZLqLc0Gvo8gziNZXF";
+let currentApiToken = localStorage.getItem('api_token') || DEFAULT_API_TOKEN;
+
+let currentCategories = JSON.parse(localStorage.getItem('custom_categories') || '[]');
+if (currentCategories.length === 0) {
+    currentCategories = [
+        { id: "uncategorized", name: "Без категории", keywords: [] },
+        { id: "products", name: "Продукты", keywords: ["творог", "сметана", "молоко", "хлеб", "сыр", "мясо", "яйцо", "масло", "кефир", "йогурт"] },
+        { id: "construction", name: "Стройматериалы / Расходники", keywords: ["цемент", "песок", "гвоздь", "шуруп", "саморез", "краска"] },
+        { id: "fuel", name: "Авто", keywords: ["бензин", "аи-92", "аи-95", "дизель", "топливо"] },
+        { id: "pharmacy", name: "Аптека / Медицина", keywords: ["таблетки", "лекарство", "мазь", "бинт", "пластырь"] },
+        { id: "household", name: "Бытовые товары / Хозтовары", keywords: ["порошок", "мыло", "шампунь", "губка", "паста"] },
+        { id: "clothes", name: "Одежда", keywords: ["футболка", "джинсы", "куртка", "носки", "обувь"] },
+        { id: "electronics", name: "Электроника и Техника", keywords: ["батарейка", "кабель", "зарядка", "наушники"] },
+        { id: "services", name: "Услуги", keywords: ["услуга", "ремонт", "доставка"] },
+        { id: "other", name: "Прочее (Запасы)", keywords: [] }
+    ];
+    localStorage.setItem('custom_categories', JSON.stringify(currentCategories));
+}
+
 const DAILY_API_LIMIT = 15;
 const AUTO_RETRY_MINUTES = 2;
 const LOCAL_TIMEOUT_MS = 3000;
-
-// v15.6: dual-URL (домен → IP), порядок важен для TLS-сертификата
-const SENDER_URLS = [
-  'https://synology-flat11.taila10dc4.ts.net:8443/upload',
-];
-
-const CATEGORIES = [
-  { id: "uncategorized", name: "Без категории" },
-  { id: "products", name: "Продукты" },      // Убрали "питания"
-  { id: "construction", name: "Стройматериалы / Расходники" },
-  { id: "fuel", name: "Авто" },
-  { id: "pharmacy", name: "Аптека / Медицина" },
-  { id: "household", name: "Бытовые товары / Хозтовары" },
-  { id: "clothes", name: "Одежда" },
-  { id: "electronics", name: "Электроника и Техника" },
-  { id: "services", name: "Услуги" },
-  { id: "other", name: "Прочее (Запасы)" } // Добавили на всякий случай
-];
+const SENDER_URLS = [ 'https://synology-flat11.taila10dc4.ts.net:8443/upload' ];
 
 let isProcessing = false;
 let lastScanTime = 0;
@@ -281,9 +305,6 @@ function setReceipts(a) { localStorage.setItem('receipts', JSON.stringify(a)); }
 function getCache() { return JSON.parse(localStorage.getItem('receipts_cache') || '{}'); }
 function setCache(o) { localStorage.setItem('receipts_cache', JSON.stringify(o)); }
 
-// === v15.6: имя отправителя — одно на устройство, задаётся при первом запуске ===
-// slug (sender_user) — то, что уходит в папку 1-inbox/<slug>/ на NAS
-// display (sender_display) — то, что показываем пользователю
 function getSenderUser() { return localStorage.getItem('sender_user') || ''; }
 function setSenderUser(u) { localStorage.setItem('sender_user', u); }
 
@@ -293,7 +314,6 @@ function getSenderDisplay() {
   return d || u || '';
 }
 
-// === v15.6: транслитерация для папки на NAS ===
 const TRANSLIT_MAP = {
   'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z',
   'и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r',
@@ -312,7 +332,6 @@ function transliterate(str) {
   return out.replace(/_+/g, '_').replace(/^_|_$/g, '');
 }
 
-// Готовит имя к сохранению: { slug, display } или { error }
 function prepareSender(rawInput) {
   const raw = String(rawInput || '').trim();
   if (!raw) return { error: 'Пустое имя' };
@@ -360,6 +379,31 @@ function saveSetupName() {
 }
 
 // =====================================================================
+// АВТОМАТИЧЕСКОЕ ОПРЕДЕЛЕНИЕ КАТЕГОРИИ
+// =====================================================================
+function autoDetectCategory(items) {
+  if (!items || items.length === 0) return 'uncategorized';
+  
+  // Берем названия всех товаров, объединяем в строку в нижнем регистре
+  const allNames = items.map(item => String(item.name || '').toLowerCase()).join(' ');
+  
+  for (const cat of currentCategories) {
+    if (!cat.keywords || cat.keywords.length === 0) continue;
+    for (const kw of cat.keywords) {
+      if (allNames.includes(kw)) {
+        return cat.id; // Нашли совпадение!
+      }
+    }
+  }
+  return 'uncategorized'; // Если ничего не нашли
+}
+
+function getCategoryName(categoryId) {
+  const cat = currentCategories.find(c => c.id === categoryId);
+  return cat ? cat.name : 'Без категории';
+}
+
+// =====================================================================
 // СТАРТ
 // =====================================================================
 window.onload = function () {
@@ -376,6 +420,10 @@ window.onload = function () {
   updateCacheInfo();
   addLog('✅ Сканер готов (v15.6), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
   registerSW();
+
+  // Заполняем поле токена при запуске
+  const apiInput = document.getElementById('apiTokenInput');
+  if (apiInput) apiInput.value = currentApiToken;
 
   if (navigator.onLine && getSenderUser()) {
     const pending = getReceipts().filter(r => r.status === 'pending').length;
@@ -535,7 +583,7 @@ async function handleScan(qrData) {
   try {
     const formData = new URLSearchParams();
     formData.append('qrraw', qrData);
-    formData.append('token', API_TOKEN);
+    formData.append('token', currentApiToken);
     const response = await fetch('https://proverkacheka.com/api/v1/check/get', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -587,6 +635,10 @@ function upgradeReceiptFromAPI(qrData, apiResponse) {
     price: item.price ? (parseFloat(item.price) / 100).toFixed(2) : '0.00',
     sum: item.sum ? (parseFloat(item.sum) / 100).toFixed(2) : '0.00'
   }));
+  
+  // АВТОМАТИЧЕСКОЕ ОПРЕДЕЛЕНИЕ КАТЕГОРИИ
+  receipts[idx].category = autoDetectCategory(receipts[idx].items);
+
   receipts[idx].status = 'ok';
   setReceipts(receipts);
   let cache = getCache();
@@ -619,7 +671,7 @@ async function retryPending(showAlert) {
     try {
       const formData = new URLSearchParams();
       formData.append('qrraw', p.qr);
-      formData.append('token', API_TOKEN);
+      formData.append('token', currentApiToken);
       const resp = await fetch('https://proverkacheka.com/api/v1/check/get', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -650,6 +702,38 @@ async function retryPending(showAlert) {
 // =====================================================================
 // ОТПРАВКА НА NAS
 // =====================================================================
+
+// Генерация JSON (для будущих интеграций)
+function build1CJson(receipts) {
+  const result = [];
+  receipts.forEach(function (receipt) {
+    const items = (receipt.items || []).map(item => ({
+      name: String(item.name || 'Товар'),
+      quantity: Number(item.quantity || 1),
+      price: Number(item.price || 0),
+      sum: Number(item.sum || 0)
+    }));
+    
+    result.push({
+      date: receipt.date,
+      total: Number(receipt.total || 0),
+      shop: receipt.shop,
+      inn: receipt.inn,
+      address: receipt.address,
+      checkNumber: receipt.checkNumber,
+      shiftNumber: receipt.shiftNumber,
+      cashier: receipt.cashier,
+      category: getCategoryName(receipt.category),
+      categoryId: receipt.category,
+      paymentMethod: receipt.paymentMethod,
+      qr: receipt.qr,
+      items: items
+    });
+  });
+  return JSON.stringify(result, null, 2);
+}
+
+// Генерация TXT (текущий формат)
 function build1CText(receipts) {
   let txtContent = '#1C:UNF\n';
   txtContent += '#Version:1.0\n';
@@ -682,13 +766,26 @@ function build1CText(receipts) {
   return txtContent;
 }
 
-async function tryPost(url, txt, filename, user) {
+function getExportFormat() {
+  return document.getElementById('exportFormatSelect')?.value || 'txt';
+}
+
+function buildExportData(receipts) {
+  const format = getExportFormat();
+  if (format === 'json') {
+    return { content: build1CJson(receipts), ext: 'json', mime: 'application/json' };
+  } else {
+    return { content: build1CText(receipts), ext: 'txt', mime: 'text/plain;charset=utf-8' };
+  }
+}
+
+async function tryPost(url, txt, filename, user, mime) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LOCAL_TIMEOUT_MS);
   try {
     const fd = new FormData();
     fd.append('user', user);
-    fd.append('file', new Blob([txt], { type: 'text/plain;charset=utf-8' }), filename);
+    fd.append('file', new Blob([txt], { type: mime }), filename);
     const resp = await fetch(url, { method: 'POST', body: fd, signal: controller.signal });
     clearTimeout(timeout);
     return resp;
@@ -719,9 +816,10 @@ async function sendTo1C(includeSent, silent) {
     if (!silent) alert('📴 Нет сети.');
     return;
   }
-  const txt = build1CText(toSend);
+  
+  const exportData = buildExportData(toSend);
   const dateStr = new Date().toISOString().slice(0, 10);
-  const filename = '1C_Чеки_' + dateStr + '_' + Date.now() + '.txt';
+  const filename = '1C_Чеки_' + dateStr + '_' + Date.now() + '.' + exportData.ext;
 
   const sendBtn = document.getElementById('sendBtn');
   sendBtn.disabled = true;
@@ -730,7 +828,7 @@ async function sendTo1C(includeSent, silent) {
   let usedUrl = null, lastErr = null;
   for (const url of SENDER_URLS) {
     try {
-      const resp = await tryPost(url, txt, filename, user);
+      const resp = await tryPost(url, exportData.content, filename, user, exportData.mime);
       if (resp.ok) { usedUrl = url; break; }
       lastErr = new Error('HTTP ' + resp.status);
     } catch (e) {
@@ -758,17 +856,17 @@ async function sendTo1C(includeSent, silent) {
 }
 
 // =====================================================================
-// ЭКСПОРТ TXT
+// ЭКСПОРТ ФАЙЛА
 // =====================================================================
 function exportTo1C() {
   let receipts = getReceipts();
   if (receipts.length === 0) { alert('❌ Нет сохранённых чеков!'); return; }
   try {
-    const txtContent = build1CText(receipts);
-    const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' });
+    const exportData = buildExportData(receipts);
+    const blob = new Blob([exportData.content], { type: exportData.mime });
     const url = URL.createObjectURL(blob);
     const dateStr = new Date().toISOString().slice(0, 10);
-    const filename = '1C_Чеки_' + dateStr + '.txt';
+    const filename = '1C_Чеки_' + dateStr + '.' + exportData.ext;
     const link = document.createElement('a');
     link.href = url;
     link.download = filename;
@@ -828,7 +926,7 @@ function renderLastReceipt() {
     html += '</div>';
   }
   html += '<select class="lr-cat" onchange="updateCategory(' + realIndex + ', this.value)">';
-  CATEGORIES.forEach(cat => {
+  currentCategories.forEach(cat => {
     const selected = receipt.category === cat.id ? 'selected' : '';
     html += '<option value="' + cat.id + '" ' + selected + '>' + cat.name + '</option>';
   });
@@ -913,7 +1011,7 @@ function renderReceiptsList() {
         html += '<div class="info">💰 ' + getPaymentMethodName(receipt.paymentMethod) + '</div>';
       }
       html += '<select class="cat-select" onchange="event.stopPropagation();updateCategory(' + realIndex + ', this.value)">';
-      CATEGORIES.forEach(cat => {
+      currentCategories.forEach(cat => {
         const selected = receipt.category === cat.id ? 'selected' : '';
         html += '<option value="' + cat.id + '" ' + selected + '>' + cat.name + '</option>';
       });
@@ -993,11 +1091,6 @@ function updateCategory(index, categoryId) {
     }
     addLog('✅ Категория: ' + getCategoryName(categoryId), 'success');
   }
-}
-
-function getCategoryName(categoryId) {
-  const cat = CATEGORIES.find(c => c.id === categoryId);
-  return cat ? cat.name : 'Без категории';
 }
 
 // =====================================================================
@@ -1123,11 +1216,66 @@ function openSettings() {
       disp.textContent = u;
     }
   }
+  
+  // Заполняем токен
+  document.getElementById('apiTokenInput').value = currentApiToken;
+  
+  // Заполняем категории
+  let catText = "";
+  currentCategories.forEach(cat => {
+      if (cat.id === 'uncategorized') return; // Пропускаем дефолтную
+      catText += cat.name + "|" + cat.keywords.join(',') + "\n";
+  });
+  document.getElementById('categoriesInput').value = catText.trim();
+
   document.getElementById('settingsModal').classList.add('active');
 }
 
 function closeSettings() {
   document.getElementById('settingsModal').classList.remove('active');
+}
+
+function saveApiToken() {
+  const input = document.getElementById('apiTokenInput');
+  const token = input.value.trim();
+  if (!token) { alert('Введите токен'); return; }
+  localStorage.setItem('api_token', token);
+  currentApiToken = token;
+  alert('✅ Токен сохранен');
+  addLog('🔑 Токен API обновлен', 'success');
+}
+
+function saveCategories() {
+  const input = document.getElementById('categoriesInput');
+  const text = input.value.trim();
+  if (!text) { alert('Введите категории'); return; }
+  
+  const newCats = [];
+  const lines = text.split('\n');
+  for (const line of lines) {
+      const parts = line.split('|');
+      if (parts.length < 2) continue;
+      const name = parts[0].trim();
+      const keywords = parts[1].split(',').map(k => k.trim().toLowerCase()).filter(k => k);
+      // Генерируем ID (латиница или просто хеш)
+      let id = name.toLowerCase().replace(/[^a-zа-я0-9]/g, '_');
+      if (!id) id = 'cat_' + Date.now();
+      newCats.push({ id: id, name: name, keywords: keywords });
+  }
+  
+  if (newCats.length === 0) {
+      alert('Не удалось распознать категории. Формат: Название|ключ1,ключ2');
+      return;
+  }
+  
+  // Добавляем "Без категории" в начало
+  newCats.unshift({ id: "uncategorized", name: "Без категории", keywords: [] });
+  
+  currentCategories = newCats;
+  localStorage.setItem('custom_categories', JSON.stringify(currentCategories));
+  alert('✅ Сохранено ' + (newCats.length - 1) + ' категорий');
+  addLog('📂 Категории обновлены (' + (newCats.length - 1) + ')', 'success');
+  renderAll();
 }
 
 // =====================================================================
@@ -1147,7 +1295,7 @@ function addManual() {
 }
 
 // =====================================================================
-// ОЧИСТКА ВСЕГО (включая имя отправителя)
+// ОЧИСТКА ВСЕГО
 // =====================================================================
 function clearCodes() {
   let receipts = getReceipts();
