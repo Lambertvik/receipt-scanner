@@ -48,12 +48,11 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .last-receipt .lr-sum { font-size: 20px; color: #111; font-weight: 800; margin-bottom: 8px; }
 .last-receipt .lr-badge { font-size: 12px; margin-left: 6px; }
 .last-receipt .lr-info { color: #555; margin-bottom: 5px; word-break: break-word; line-height: 1.4; }
-.last-receipt .lr-vat { color: #666; font-size: 12px; margin-bottom: 5px; }
-.last-receipt .lr-tech { font-size: 10px; color: #bbb; margin-bottom: 5px; word-break: break-all; }
 .last-receipt .lr-items { background: white; padding: 10px; border-radius: 6px; margin-top: 8px; }
 .last-receipt .lr-item-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; font-size: 12px; gap: 8px; }
 .last-receipt .lr-item-row:last-child { border-bottom: none; }
-.last-receipt .lr-item-meta { font-size: 11px; color: #888; margin-top: -4px; margin-bottom: 4px; }
+.last-receipt .lr-item-cat { color: #888; font-size: 11px; margin-left: 4px; }
+.last-receipt .lr-nds { color: #666; font-size: 11px; margin-left: 4px; }
 .last-receipt .lr-cat { width: 100%; padding: 8px; border: 1px solid #ff9800; border-radius: 6px; font-size: 13px; margin-top: 10px; background: white; }
 .last-receipt .lr-qr { font-family: monospace; font-size: 10px; color: #888; background: #eee; padding: 8px; border-radius: 4px; margin-top: 8px; word-break: break-all; }
 
@@ -75,12 +74,11 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .receipt-detail .btn-delete { background: #f44336; color: white; border: none; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; cursor: pointer; flex-shrink: 0; }
 .receipt-detail .detail-sum { font-size: 18px; font-weight: bold; margin-bottom: 8px; }
 .receipt-detail .info { color: #555; margin-bottom: 4px; word-break: break-word; }
-.receipt-detail .vat-info { color: #666; font-size: 12px; margin-bottom: 4px; }
-.receipt-detail .tech-info { font-size: 10px; color: #bbb; margin-bottom: 4px; word-break: break-all; }
 .receipt-detail .items { background: white; padding: 8px; border-radius: 4px; margin-top: 6px; }
 .receipt-detail .item-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee; font-size: 12px; gap: 8px; }
 .receipt-detail .item-row:last-child { border-bottom: none; }
-.receipt-detail .item-meta { font-size: 11px; color: #888; margin-top: -4px; margin-bottom: 4px; }
+.receipt-detail .item-cat { color: #888; font-size: 11px; margin-left: 4px; }
+.receipt-detail .item-nds { color: #666; font-size: 11px; margin-left: 4px; }
 .receipt-detail .cat-select { width: 100%; padding: 6px; border: 1px solid #ff9800; border-radius: 4px; font-size: 12px; margin-top: 8px; }
 .receipt-detail .qr-str { font-family: monospace; font-size: 10px; color: #888; background: #eee; padding: 6px; border-radius: 4px; margin-top: 8px; word-break: break-all; }
 
@@ -153,7 +151,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <div class="stats-small" id="statsSmall"></div>
 </div>
 
-<div class="footer">v17.3 | offline-first · категории по товарам · НДС из HTML (20%/22%/10%/0%/без) · полный raw-ответ API</div>
+<div class="footer">v17.2 | offline-first · категории для каждого товара · НДС по позициям</div>
 
 <div class="modal-overlay" id="setupModal">
   <div class="modal" style="max-width: 420px;">
@@ -494,6 +492,7 @@ function promptForItemCategory(receiptIndex, itemIndex, itemName) {
     if (receipts[receiptIndex] && receipts[receiptIndex].items[itemIndex]) {
       receipts[receiptIndex].items[itemIndex].category = selectedCat.id;
       
+      // Пересчитываем общую категорию чека
       const cats = new Set(receipts[receiptIndex].items.map(i => i.category));
       receipts[receiptIndex].category = cats.size === 1 ? [...cats][0] : 'mixed';
       
@@ -535,7 +534,7 @@ window.onload = function () {
   renderLastReceipt();
   renderReceiptsList();
   updateCacheInfo();
-  addLog('✅ Сканер готов (v17.3), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
+  addLog('✅ Сканер готов (v17.2), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
   registerSW();
 
   loadExportFormat();
@@ -668,10 +667,10 @@ async function handleScan(qrData) {
     total: parseQRSum(qrData),
     shop: '', inn: '', address: '',
     checkNumber: '', shiftNumber: '', cashier: '',
-    operationType: 1, taxationType: 0,
-    kktRegId: '', kktNumber: '', fiscalDriveNumber: '', fiscalDocumentNumber: '', fiscalSign: '',
+    operationType: '1',
+    category: 'uncategorized',
     cashTotalSum: 0, ecashTotalSum: 0,
-    ndsRates: {},
+    nds18: 0, nds10: 0, nds0: 0, ndsNo: 0,
     paymentMethod: 'unknown',
     items: [], timestamp: Date.now(),
     status: 'pending'
@@ -716,11 +715,13 @@ async function handleScan(qrData) {
         if (navigator.vibrate) navigator.vibrate(200);
         addLog('✅ Чек расшифрован: ' + upgraded.items.length + ' тов.', 'success');
         
+        // Проверяем, есть ли товары без категории, и предлагаем их выбрать
         const uncategorizedItems = upgraded.items
           .map((item, idx) => ({ item, idx }))
           .filter(x => x.item.category === 'uncategorized');
         
         if (uncategorizedItems.length > 0) {
+          // Предлагаем для первого товара без категории (остальные будут в следующий раз)
           const first = uncategorizedItems[0];
           setTimeout(() => {
             promptForItemCategory(receipts.length - 1, first.idx, first.item.name);
@@ -728,7 +729,8 @@ async function handleScan(qrData) {
         }
       }
     } else {
-      addLog('⚠️ Ошибка API (code=' + data.code + ')', 'error');
+      const errMsg = data.message || data.error || JSON.stringify(data);
+      addLog('❌ Ошибка API [' + data.code + ']: ' + errMsg, 'error');
     }
   } catch (error) {
     addLog('❌ Сеть: ' + error.message + ' — остался pending', 'error');
@@ -739,20 +741,15 @@ async function handleScan(qrData) {
 }
 
 // =====================================================================
-// PENDING → OK (+ НДС ИЗ HTML + RAW ДАННЫЕ, ФИКС v17.3)
+// PENDING → OK (+ НДС v17.2 FIX)
 // =====================================================================
 function upgradeReceiptFromAPI(qrData, apiResponse) {
   const json = apiResponse.data.json;
-  const html = apiResponse.data.html || ''; // Получаем HTML
-  
   let receipts = getReceipts();
   const idx = receipts.findIndex(r => r.qr === qrData);
   if (idx < 0) return null;
   
-  // === СОХРАНЯЕМ СЫРОЙ ОТВЕТ API ПОЛНОСТЬЮ ===
-  receipts[idx].raw = json; 
-  
-  // Производные поля для удобства работы (вычисляются из raw):
+  // ... (заполнение шапки чека: date, total, shop, inn, address, checkNumber, shiftNumber, cashier, cashTotalSum, ecashTotalSum, paymentMethod) ...
   const address = String(json.retailPlaceAddres || json.retailPlaceAddress || json.address || '');
   receipts[idx].date = json.ticketDate || receipts[idx].date;
   receipts[idx].total = json.totalSum ? (parseFloat(json.totalSum) / 100).toFixed(2) : receipts[idx].total;
@@ -762,94 +759,63 @@ function upgradeReceiptFromAPI(qrData, apiResponse) {
   receipts[idx].checkNumber = String(json.requestNumber || '');
   receipts[idx].shiftNumber = String(json.shiftNumber || '');
   receipts[idx].cashier = String(json.operator || '');
-  receipts[idx].operationType = Number(json.operationType || 1); // 1=Приход, 2=Возврат прихода, 3=Расход, 4=Возврат расхода
-  receipts[idx].taxationType = Number(json.taxationType || 0);   // 1=ОСН, 2=УСН, 8=ЕНВД, 16=ЕСХН, 32=ПСН
-  receipts[idx].kktRegId = String(json.kktRegId || '');          // Рег. номер ККТ
-  receipts[idx].kktNumber = String(json.kktNumber || '');        // Заводской № ККТ
-  receipts[idx].fiscalDriveNumber = String(json.fiscalDriveNumber || ''); // ФН
-  receipts[idx].fiscalDocumentNumber = String(json.fiscalDocumentNumber || ''); // ФД
-  receipts[idx].fiscalSign = String(json.fiscalSign || '');      // ФПД
-
-  // Оплата
   receipts[idx].cashTotalSum = json.cashTotalSum ? parseFloat(json.cashTotalSum) / 100 : 0;
   receipts[idx].ecashTotalSum = json.ecashTotalSum ? parseFloat(json.ecashTotalSum) / 100 : 0;
   receipts[idx].paymentMethod = determinePaymentMethod(json.cashTotalSum, json.ecashTotalSum);
 
-  // === Агрегаты налога из JSON (для проверки целостности и fallback) ===
-  receipts[idx].nds18_json = json.nds18 ? parseFloat(json.nds18) / 100 : 0;
-  receipts[idx].nds10_json = json.nds   ? parseFloat(json.nds)   / 100 : 0;
-  receipts[idx].nds0_json  = json.nds0  ? parseFloat(json.nds0)  / 100 : 0;
-  receipts[idx].ndsNo_json = json.ndsNo ? parseFloat(json.ndsNo) / 100 : 0;
+  // === НДС уровня чека (берём напрямую из JSON) ===
+  receipts[idx].nds18 = json.nds18 ? parseFloat(json.nds18) / 100 : 0; 
+  receipts[idx].nds10 = json.nds   ? parseFloat(json.nds)   / 100 : 0; 
+  receipts[idx].nds0  = json.nds0  ? parseFloat(json.nds0)  / 100 : 0; 
+  receipts[idx].ndsNo = json.ndsNo ? parseFloat(json.ndsNo) / 100 : 0; 
 
-  // === ПАРСИНГ HTML ДЛЯ СТАВОК ===
-  // Ищем все вхождения "НДС со ставкой XX%" или "НДС итого чека со ставкой XX%"
-  const vatRegex = /НДС\s+(?:со\s+ставкой|итого\s+чека\s+со\s+ставкой)\s+(\d+)\s*%/gi;
-  const matches = [...html.matchAll(vatRegex)];
-  
-  // Группируем найденные проценты (уникальные значения)
-  const uniqueRates = [...new Set(matches.map(m => parseInt(m[1])))].sort((a,b)=>b-a);
-  
-  // Определяем основную ставку чека (самая высокая или первая встречающаяся)
-  const mainRate = uniqueRates.length > 0 ? uniqueRates[0] : null; 
-  
-  // Сохраняем карту ставок для отображения
-  receipts[idx].ndsRates = {};
-  matches.forEach(m => {
-      const rate = m[1];
-      receipts[idx].ndsRates[rate + '%'] = true; 
-  });
+  // Маппинг числовых кодов НДС из API в понятные человеку ставки
+  function mapTaxCode(code) {
+    if (code === undefined || code === null || code === '') return 'без НДС';
+    const c = parseInt(code);
+    switch(c) {
+      case 1: return 'без НДС';
+      case 2: return '10%';
+      case 3: return '20%'; // Старый 18%, новый может приходить как 3 или 11
+      case 4: return '20%'; // Расчетная 18/1.18 -> обычно трактуем как ставку 20% сейчас
+      case 5: return '10%'; // Расчетная 10/1.10
+      case 6: return '0%';
+      case 7: return 'без НДС';
+      case 11: return '20%'; // Часто встречается у крупных сетей (Ашан, Лента)
+      default: return 'ставка ' + c; // Если неизвестный код, пишем цифру, чтобы видеть проблему
+    }
+  }
 
-  receipts[idx].items = (json.items || []).map((item, itemIdx) => {
+  receipts[idx].items = (json.items || []).map(item => {
     const sumRub = item.sum ? parseFloat(item.sum) / 100 : 0;
     
-    // Извлекаем ставку для позиции из HTML (эвристика: если одна ставка в чеке — она общая)
-    let taxRate = '?';
-    if (uniqueRates.length === 1 && mainRate !== null) {
-        taxRate = mainRate + '%'; // Одна ставка на весь чек
-    } else if (uniqueRates.length > 1) {
-        // Смешанный чек: пробуем найти конкретную ставку для этой позиции в HTML.
-        // Так как парсить DOM сложно, используем эвристику:
-        // Если позиция содержит ключевые слова высокой ставки (например, алкоголь/табак часто под полной ставкой),
-        // а продукты могут быть под льготной. Но без точного маппинга это рискованно.
-        // Поэтому безопаснее поставить '?' и дать пользователю выбрать вручную через promptForItemCategory (который можно расширить).
-        // Или просто применить максимальную ставку как дефолт для бухгалтерии.
-        taxRate = '?'; // Требует ручной проверки пользователем
-    } else {
-        // Ставок не найдено -> проверяем JSON агрегаты (fallback)
-        if (receipts[idx].ndsNo_json > 0 && receipts[idx].nds18_json === 0 && receipts[idx].nds10_json === 0) {
-            taxRate = 'без НДС';
-        } else if (receipts[idx].nds0_json > 0) {
-             taxRate = '0%';
-        } else {
-            taxRate = '?';
-        }
-    }
-
-    // Расчет суммы налога позиции (универсальная формула)
-    const rateNum = parseInt(taxRate);
-    let taxSum = 0;
-    if (!isNaN(rateNum) && rateNum > 0) {
-        taxSum = +(sumRub * rateNum / (100 + rateNum)).toFixed(2);
-    }
+    // Получаем код налога. Может лежать в tax, ndsType, vatType
+    let rawTaxCode = item.tax ?? item.ndsType ?? item.vatType ?? ''; 
     
-    return {
-        // Сырые данные из API
-        name: String(item.name || 'Товар'),
-        quantity: Number(item.quantity || 1),
-        price: item.price ? parseFloat(item.price) / 100 : 0,
-        sum: sumRub,
-        ndsCode: item.nds !== undefined ? item.nds : null, // Код ставки ФФД (1..6+)
-        paymentType: item.paymentType !== undefined ? item.paymentType : null,
-        productType: item.productType !== undefined ? item.productType : null,
-        
-        // Производные для UI/экспорта
-        taxRate: taxRate,     // "22%", "10%", "?", "без НДС"
-        taxSum: taxSum,       // сумма налога в рублях
-        
-        category: autoDetectCategory([{ name: String(item.name || '') }])
+    const rateStr = mapTaxCode(rawTaxCode);
+    
+    // Считаем сумму налога исходя из распознанной ставки
+    let calcTaxSum = 0;
+    if (rateStr === '20%') calcTaxSum = +(sumRub * 20 / 120).toFixed(2);
+    else if (rateStr === '10%') calcTaxSum = +(sumRub * 10 / 110).toFixed(2);
+    else if (rateStr === '0%' || rateStr === 'без НДС') calcTaxSum = 0;
+    else calcTaxSum = 0; // Для неизвестных ставок пока 0, чтобы не ломать баланс
+
+    const rawItem = {
+      name: String(item.name || 'Товар'),
+      quantity: item.quantity || 1,
+      price: item.price ? (parseFloat(item.price) / 100).toFixed(2) : '0.00',
+      sum: sumRub.toFixed(2),
+      taxRate: rateStr,
+      taxSum: calcTaxSum,
+      rawTaxCode: rawTaxCode // Сохраняем оригинальный код для отладки
     };
+    
+    rawItem.category = autoDetectCategory([rawItem]);
+    return rawItem;
   });
   
+  // Вычисляем общую категорию чека
   const cats = new Set(receipts[idx].items.map(i => i.category));
   receipts[idx].category = cats.size === 1 ? [...cats][0] : 'mixed';
   
@@ -896,7 +862,11 @@ async function retryPending(showAlert) {
       dailyStats[today] = todayCount;
       localStorage.setItem('daily_stats', JSON.stringify(dailyStats));
       if (data.code === 1) { upgradeReceiptFromAPI(p.qr, data); upgraded++; }
-      else { errors++; }
+      else { 
+        errors++; 
+        const errMsg = data.message || data.error || JSON.stringify(data);
+        addLog('❌ Retry Error [' + data.code + '] for ' + p.qr.substring(0,20) + '...: ' + errMsg, 'error');
+      }
     } catch (err) {
       addLog('❌ Сеть пропала на ' + upgraded + '/' + pending.length, 'error');
       break;
@@ -914,44 +884,36 @@ async function retryPending(showAlert) {
 }
 
 // =====================================================================
-// ОТПРАВКА НА NAS (+ НДС и все данные в экспорте)
+// ОТПРАВКА НА NAS
 // =====================================================================
 function build1CJson(receipts) {
   const result = [];
   receipts.forEach(function (receipt) {
     const items = (receipt.items || []).map(item => ({
-      name: item.name,
-      quantity: item.quantity,
-      price: item.price.toFixed(2),
-      sum: item.sum.toFixed(2),
-      taxRate: item.taxRate,
-      taxSum: item.taxSum.toFixed(2),
-      ndsCode: item.ndsCode,           // ← сырой код ФФД
-      paymentType: item.paymentType,   // ← тип оплаты позиции
-      productType: item.productType,   // ← вид товара
-      category: getCategoryName(item.category || 'uncategorized')
+      name: String(item.name || 'Товар'),
+      quantity: Number(item.quantity || 1),
+      price: Number(item.price || 0),
+      sum: Number(item.sum || 0),
+      category: getCategoryName(item.category || 'uncategorized'),
+      taxRate: String(item.taxRate || 'без НДС'),   // ← новое
+      taxSum: Number(item.taxSum || 0)               // ← новое
     }));
     
     result.push({
       date: receipt.date,
-      total: receipt.total,
+      total: Number(receipt.total || 0),
       shop: receipt.shop,
       inn: receipt.inn,
       address: receipt.address,
       checkNumber: receipt.checkNumber,
       shiftNumber: receipt.shiftNumber,
       cashier: receipt.cashier,
-      operationType: receipt.operationType,         // ← 1=Приход, 2=Возврат...
-      taxationType: receipt.taxationType,           // ← 1=ОСН, 2=УСН...
-      kktRegId: receipt.kktRegId,                   // ← рег. номер ККТ
-      kktNumber: receipt.kktNumber,                 // ← заводской № ККТ
-      fiscalDriveNumber: receipt.fiscalDriveNumber, // ← ФН
-      fiscalDocumentNumber: receipt.fiscalDocumentNumber, // ← ФД
-      fiscalSign: receipt.fiscalSign,               // ← ФПД
-      cashTotalSum: receipt.cashTotalSum.toFixed(2),
-      ecashTotalSum: receipt.ecashTotalSum.toFixed(2),
+      category: getCategoryName(receipt.category || 'uncategorized'),
       paymentMethod: receipt.paymentMethod,
-      ndsRates: receipt.ndsRates,                   // ← карта найденных ставок {"22%": true}
+      nds18: Number(receipt.nds18 || 0),   // ← новое (уровень чека)
+      nds10: Number(receipt.nds10 || 0),   // ← новое
+      nds0: Number(receipt.nds0 || 0),     // ← новое
+      ndsNo: Number(receipt.ndsNo || 0),   // ← новое
       qr: receipt.qr,
       items: items
     });
@@ -961,51 +923,43 @@ function build1CJson(receipts) {
 
 function build1CText(receipts) {
   let txtContent = '#1C:UNF\n';
-  txtContent += '#Version:1.2\n';
-  txtContent += '#ScannerVersion:17.3\n';
+  txtContent += '#Version:1.1\n';  // ← bumped minor version
+  txtContent += '#ScannerVersion:17.2\n';
   txtContent += '#Encoding:UTF-8\n';
   txtContent += '#Separator:;\n';
-  // Расширенный набор колонок
-  txtContent += '#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,OpType,TaxType,KKT_Reg,KKT_Zavod,FN,FD,FPD,Category,PayMethod,Item,Qty,Price,TaxRate,TaxSum,NdsCode,QRString\n\n';
+  txtContent += '#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,TaxRate,TaxSum,QRString\n\n';
   
   receipts.forEach(function (receipt) {
-    const esc = s => String(s || '').replace(/;/g, ',').replace(/"/g, '""');
-    const opMap = {1:'Приход',2:'Возврат прихода',3:'Расход',4:'Возврат расхода'};
-    const taxMap = {1:'ОСН',2:'УСН',8:'ЕНВД',16:'ЕСХН',32:'ПСН'};
-    
-    const header = [
-      esc(receipt.date),
-      esc(receipt.total),
-      esc(receipt.shop),
-      esc(receipt.inn),
-      esc(receipt.address),
-      esc(receipt.checkNumber),
-      esc(receipt.shiftNumber),
-      esc(receipt.cashier),
-      esc(opMap[receipt.operationType] || receipt.operationType),
-      esc(taxMap[receipt.taxationType] || receipt.taxationType),
-      esc(receipt.kktRegId),
-      esc(receipt.kktNumber),
-      esc(receipt.fiscalDriveNumber),
-      esc(receipt.fiscalDocumentNumber),
-      esc(receipt.fiscalSign),
-      esc(getCategoryName(receipt.category)),
-      esc(receipt.paymentMethod)
-    ].join(';');
+    const date = String(receipt.date || '');
+    const total = String(receipt.total || '0.00');
+    const shop = String(receipt.shop || '').replace(/;/g, ',');
+    const inn = String(receipt.inn || '').replace(/;/g, ',');
+    const address = String(receipt.address || '').replace(/;/g, ',');
+    const checkNum = String(receipt.checkNumber || '').replace(/;/g, ',');
+    const shiftNum = String(receipt.shiftNumber || '').replace(/;/g, ',');
+    const cashier = String(receipt.cashier || '').replace(/;/g, ',');
+    const paymentMethod = String(receipt.paymentMethod || 'unknown');
+    const qr = String(receipt.qr || '').replace(/;/g, ',').replace(/"/g, '""');
     
     if (receipt.items && receipt.items.length > 0) {
       receipt.items.forEach(function (item) {
-        txtContent += header + ';' 
-                    + '"' + esc(item.name) + '";'
-                    + item.quantity + ';'
-                    + item.price.toFixed(2) + ';'
-                    + esc(item.taxRate) + ';'
-                    + item.taxSum.toFixed(2) + ';'
-                    + (item.ndsCode !== null ? item.ndsCode : '') + ';'
-                    + esc(receipt.qr) + ';v17.3\n';
+        const category = getCategoryName(item.category || receipt.category || 'uncategorized');
+        const name = String(item.name || 'Товар').replace(/;/g, ',').replace(/"/g, '""');
+        const qty = String(item.quantity || 1);
+        const price = String(item.price || '0.00');
+        const taxRate = String(item.taxRate || 'без НДС');
+        const taxSum = String(item.taxSum != null ? Number(item.taxSum).toFixed(2) : '0.00');
+        
+        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' 
+                    + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' 
+                    + paymentMethod + ';\"' + name + '\";' + qty + ';' + price + ';' 
+                    + taxRate + ';' + taxSum + ';' + qr + ';v17.2\n';
       });
     } else {
-      txtContent += header + ';\"Без детализации\";1;' + receipt.total + ';?;0.00;;' + esc(receipt.qr) + '\n';
+      const category = getCategoryName(receipt.category || 'uncategorized');
+      txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' 
+                  + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' 
+                  + paymentMethod + ';\"Без детализации\";1;' + total + ';без НДС;0.00;' + qr + '\n';
     }
   });
   return txtContent;
@@ -1126,30 +1080,12 @@ function exportTo1C() {
 }
 
 // =====================================================================
-// ПОСЛЕДНИЙ ЧЕК (+ НДС и все данные в UI)
+// ПОСЛЕДНИЙ ЧЕК
 // =====================================================================
 function toggleLastSection() {
   lastSectionExpanded = !lastSectionExpanded;
   document.getElementById('lastSection').classList.toggle('expanded', lastSectionExpanded);
   renderLastReceipt();
-}
-
-function renderVatSummary(receipt) {
-  if (Object.keys(receipt.ndsRates).length === 0) return '';
-  const ratesArr = Object.entries(receipt.ndsRates).filter(([_,v])=>v).map(([k])=>k);
-  if (ratesArr.length === 0) return '';
-  return '<div class="lr-vat">📊 Ставки НДС: ' + ratesArr.join(', ') + '</div>';
-}
-
-function renderItemMeta(item) {
-  const catName = getCategoryName(item.category || 'uncategorized');
-  let meta = catName;
-  if (item.taxRate) {
-    meta += ' · НДС ' + item.taxRate;
-    if (item.taxSum > 0) meta += ' (' + item.taxSum.toFixed(2) + ' ₽)';
-  }
-  if (item.ndsCode !== null && item.ndsCode !== undefined) meta += ' [код:' + item.ndsCode + ']';
-  return meta;
 }
 
 function renderLastReceipt() {
@@ -1188,14 +1124,16 @@ function renderLastReceipt() {
     if (receipt.ecashTotalSum > 0) html += ' (карта: ' + receipt.ecashTotalSum.toFixed(2) + ')';
     html += '</div>';
   }
-  
-  // Технические реквизиты
-  const opMap = {1:'Приход',2:'Возврат',3:'Расход',4:'Возврат расх.'};
-  const taxMap = {1:'ОСН',2:'УСН',8:'ЕНВД',16:'ЕСХН',32:'ПСН'};
-  html += '<div class="lr-info" style="font-size:11px;color:#999;">Тип: ' + (opMap[receipt.operationType]||'?') + ' · Налог: ' + (taxMap[receipt.taxationType]||'?') + '</div>';
-  html += '<div class="lr-tech">ККТ: ' + receipt.kktRegId + ' · ФН: ' + (receipt.fiscalDriveNumber ? receipt.fiscalDriveNumber.slice(-6) : '-') + ' · ФД: ' + receipt.fiscalDocumentNumber + '</div>';
-  
-  html += renderVatSummary(receipt);
+  // === НДС уровня чека ===
+  if (receipt.nds18 > 0 || receipt.nds10 > 0 || receipt.nds0 > 0 || receipt.ndsNo > 0) {
+    let vatHtml = '<div class="lr-info" style="color:#666;">📊 НДС:';
+    if (receipt.nds18 > 0) vatHtml += ' 20%: ' + receipt.nds18.toFixed(2);
+    if (receipt.nds10 > 0) vatHtml += ' · 10%: ' + receipt.nds10.toFixed(2);
+    if (receipt.nds0 > 0) vatHtml += ' · 0%: ' + receipt.nds0.toFixed(2);
+    if (receipt.ndsNo > 0) vatHtml += ' · без НДС: ' + receipt.ndsNo.toFixed(2);
+    vatHtml += '</div>';
+    html += vatHtml;
+  }
   html += '<select class="lr-cat" onchange="updateCategory(' + realIndex + ', this.value)">';
   currentCategories.forEach(cat => {
     const selected = receipt.category === cat.id ? 'selected' : '';
@@ -1205,12 +1143,17 @@ function renderLastReceipt() {
   if (receipt.items && receipt.items.length > 0) {
     html += '<div class="lr-items">';
     receipt.items.forEach((item, itemIdx) => {
+      const itemCatName = getCategoryName(item.category || 'uncategorized');
       html += '<div class="lr-item-row" style="cursor:pointer;" onclick="promptForItemCategory(' + realIndex + ', ' + itemIdx + ', \'' + item.name.replace(/'/g, "\\'") + '\')">';
       html += '<span>' + item.name + '</span>';
       html += '<span>' + item.quantity + ' шт.</span>';
-      html += '<span style="color:#4CAF50;font-weight:600;">' + item.sum.toFixed(2) + ' ₽</span>';
+      html += '<span style="color:#4CAF50;font-weight:600;">' + item.sum + ' ₽</span>';
       html += '</div>';
-      html += '<div class="lr-item-meta">' + renderItemMeta(item) + '</div>';
+      // === Категория + НДС позиции ===
+      html += '<div style="font-size:11px;color:#888;margin-top:-4px;margin-bottom:4px;">' 
+            + itemCatName 
+            + (item.taxRate ? ' · НДС ' + item.taxRate + (item.taxSum > 0 ? ' (' + item.taxSum.toFixed(2) + ' ₽)' : '') : '')
+            + '</div>';
     });
     html += '</div>';
   } else if (receipt.status === 'pending') {
@@ -1225,7 +1168,7 @@ function renderLastReceipt() {
 }
 
 // =====================================================================
-// ОСТАЛЬНЫЕ ЧЕКИ (+ НДС и все данные в UI)
+// ОСТАЛЬНЫЕ ЧЕКИ
 // =====================================================================
 function toggleReceiptsSection() {
   receiptsExpanded = !receiptsExpanded;
@@ -1286,20 +1229,16 @@ function renderReceiptsList() {
       if (receipt.paymentMethod) {
         html += '<div class="info">💰 ' + getPaymentMethodName(receipt.paymentMethod) + '</div>';
       }
-      
-      // Технические реквизиты
-      const opMap = {1:'Приход',2:'Возврат',3:'Расход',4:'Возврат расх.'};
-      const taxMap = {1:'ОСН',2:'УСН',8:'ЕНВД',16:'ЕСХН',32:'ПСН'};
-      html += '<div class="info" style="font-size:11px;color:#999;">Тип: ' + (opMap[receipt.operationType]||'?') + ' · Налог: ' + (taxMap[receipt.taxationType]||'?') + '</div>';
-      html += '<div class="tech-info">ККТ: ' + receipt.kktRegId + ' · ФН: ' + (receipt.fiscalDriveNumber ? receipt.fiscalDriveNumber.slice(-6) : '-') + ' · ФД: ' + receipt.fiscalDocumentNumber + '</div>';
-      
-      if (Object.keys(receipt.ndsRates).length > 0) {
-        const ratesArr = Object.entries(receipt.ndsRates).filter(([_,v])=>v).map(([k])=>k);
-        if (ratesArr.length > 0) {
-          html += '<div class="vat-info">📊 Ставки НДС: ' + ratesArr.join(', ') + '</div>';
-        }
+      // === НДС уровня чека ===
+      if (receipt.nds18 > 0 || receipt.nds10 > 0 || receipt.nds0 > 0 || receipt.ndsNo > 0) {
+        let vatHtml = '<div class="info" style="color:#666;">📊 НДС:';
+        if (receipt.nds18 > 0) vatHtml += ' 20%: ' + receipt.nds18.toFixed(2);
+        if (receipt.nds10 > 0) vatHtml += ' · 10%: ' + receipt.nds10.toFixed(2);
+        if (receipt.nds0 > 0) vatHtml += ' · 0%: ' + receipt.nds0.toFixed(2);
+        if (receipt.ndsNo > 0) vatHtml += ' · без НДС: ' + receipt.ndsNo.toFixed(2);
+        vatHtml += '</div>';
+        html += vatHtml;
       }
-      
       html += '<select class="cat-select" onchange="event.stopPropagation();updateCategory(' + realIndex + ', this.value)">';
       currentCategories.forEach(cat => {
         const selected = receipt.category === cat.id ? 'selected' : '';
@@ -1309,12 +1248,17 @@ function renderReceiptsList() {
       if (receipt.items && receipt.items.length > 0) {
         html += '<div class="items">';
         receipt.items.forEach((item, itemIdx) => {
+          const itemCatName = getCategoryName(item.category || 'uncategorized');
           html += '<div class="item-row" style="cursor:pointer;" onclick="event.stopPropagation();promptForItemCategory(' + realIndex + ', ' + itemIdx + ', \'' + item.name.replace(/'/g, "\\'") + '\')">';
           html += '<span>' + item.name + '</span>';
           html += '<span>' + item.quantity + ' шт.</span>';
-          html += '<span style="font-weight:600;color:#4CAF50;">' + item.sum.toFixed(2) + ' ₽</span>';
+          html += '<span style="font-weight:600;color:#4CAF50;">' + item.sum + ' ₽</span>';
           html += '</div>';
-          html += '<div class="item-meta">' + renderItemMeta(item) + '</div>';
+          // === Категория + НДС позиции ===
+          html += '<div style="font-size:11px;color:#888;margin-top:-4px;margin-bottom:4px;">' 
+                + itemCatName 
+                + (item.taxRate ? ' · НДС ' + item.taxRate + (item.taxSum > 0 ? ' (' + item.taxSum.toFixed(2) + ' ₽)' : '') : '')
+                + '</div>';
         });
         html += '</div>';
       } else if (receipt.status === 'pending') {
@@ -1378,6 +1322,7 @@ function updateCategory(index, categoryId) {
   let receipts = getReceipts();
   if (index >= 0 && index < receipts.length) {
     receipts[index].category = categoryId;
+    // Если пользователь вручную выбрал категорию для всего чека, применяем ко всем товарам
     if (categoryId !== 'mixed' && categoryId !== 'uncategorized') {
       receipts[index].items.forEach(item => {
         if (item.category === 'uncategorized' || !item.category) {
@@ -1442,7 +1387,7 @@ function updateCacheInfo() {
     diag.innerHTML = 'Отправитель: ' + (d || '(не задан)') +
       (d && d !== u ? ' (папка: ' + u + ')' : '') +
       '<br><br>Адрес отправки:<br>' + SENDER_URLS[0] +
-      '<br><br>Версия: v17.3<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
+      '<br><br>Версия: v17.2<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
   }
 }
 
@@ -1493,7 +1438,7 @@ function copyLog() {
   if (navigator.clipboard) {
     navigator.clipboard.writeText(text).then(() => alert('📋 Лог скопирован в буфер'));
   } else {
-    alert('Копирование недоступно в этом браузере');
+    alert('Копирование недоступен в этом браузере');
   }
 }
 
