@@ -52,6 +52,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .last-receipt .lr-item-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; font-size: 12px; gap: 8px; }
 .last-receipt .lr-item-row:last-child { border-bottom: none; }
 .last-receipt .lr-item-cat { color: #888; font-size: 11px; margin-left: 4px; }
+.last-receipt .lr-nds { color: #666; font-size: 11px; margin-left: 4px; }
 .last-receipt .lr-cat { width: 100%; padding: 8px; border: 1px solid #ff9800; border-radius: 6px; font-size: 13px; margin-top: 10px; background: white; }
 .last-receipt .lr-qr { font-family: monospace; font-size: 10px; color: #888; background: #eee; padding: 8px; border-radius: 4px; margin-top: 8px; word-break: break-all; }
 
@@ -77,6 +78,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .receipt-detail .item-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee; font-size: 12px; gap: 8px; }
 .receipt-detail .item-row:last-child { border-bottom: none; }
 .receipt-detail .item-cat { color: #888; font-size: 11px; margin-left: 4px; }
+.receipt-detail .item-nds { color: #666; font-size: 11px; margin-left: 4px; }
 .receipt-detail .cat-select { width: 100%; padding: 6px; border: 1px solid #ff9800; border-radius: 4px; font-size: 12px; margin-top: 8px; }
 .receipt-detail .qr-str { font-family: monospace; font-size: 10px; color: #888; background: #eee; padding: 6px; border-radius: 4px; margin-top: 8px; word-break: break-all; }
 
@@ -149,7 +151,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <div class="stats-small" id="statsSmall"></div>
 </div>
 
-<div class="footer">v16.0 | offline-first · категории для каждого товара</div>
+<div class="footer">v17.0 | offline-first · категории для каждого товара · НДС по позициям</div>
 
 <div class="modal-overlay" id="setupModal">
   <div class="modal" style="max-width: 420px;">
@@ -532,7 +534,7 @@ window.onload = function () {
   renderLastReceipt();
   renderReceiptsList();
   updateCacheInfo();
-  addLog('✅ Сканер готов (v16.0), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
+  addLog('✅ Сканер готов (v17.0), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
   registerSW();
 
   loadExportFormat();
@@ -668,6 +670,7 @@ async function handleScan(qrData) {
     operationType: '1',
     category: 'uncategorized',
     cashTotalSum: 0, ecashTotalSum: 0,
+    nds18: 0, nds10: 0, nds0: 0, ndsNo: 0,
     paymentMethod: 'unknown',
     items: [], timestamp: Date.now(),
     status: 'pending'
@@ -737,7 +740,7 @@ async function handleScan(qrData) {
 }
 
 // =====================================================================
-// PENDING → OK
+// PENDING → OK (+ НДС)
 // =====================================================================
 function upgradeReceiptFromAPI(qrData, apiResponse) {
   const json = apiResponse.data.json;
@@ -756,14 +759,55 @@ function upgradeReceiptFromAPI(qrData, apiResponse) {
   receipts[idx].cashTotalSum = json.cashTotalSum ? parseFloat(json.cashTotalSum) / 100 : 0;
   receipts[idx].ecashTotalSum = json.ecashTotalSum ? parseFloat(json.ecashTotalSum) / 100 : 0;
   receipts[idx].paymentMethod = determinePaymentMethod(json.cashTotalSum, json.ecashTotalSum);
+
+  // === НДС уровня чека (из документации API) ===
+  receipts[idx].nds18 = json.nds18 ? parseFloat(json.nds18) / 100 : 0; // 20%
+  receipts[idx].nds10 = json.nds   ? parseFloat(json.nds)   / 100 : 0; // 10%
+  receipts[idx].nds0  = json.nds0  ? parseFloat(json.nds0)  / 100 : 0; // 0%
+  receipts[idx].ndsNo = json.ndsNo ? parseFloat(json.ndsNo) / 100 : 0; // не облагается
+
+  const hasAnyVat = receipts[idx].nds18 > 0 || receipts[idx].nds10 > 0 || receipts[idx].nds0 > 0 || receipts[idx].ndsNo > 0;
+
   receipts[idx].items = (json.items || []).map(item => {
+    const sumRub = item.sum ? parseFloat(item.sum) / 100 : 0;
     const rawItem = {
       name: String(item.name || 'Товар'),
       quantity: item.quantity || 1,
       price: item.price ? (parseFloat(item.price) / 100).toFixed(2) : '0.00',
-      sum: item.sum ? (parseFloat(item.sum) / 100).toFixed(2) : '0.00'
+      sum: sumRub.toFixed(2),
+      taxRate: '',      // '20%', '10%', '0%', 'без НДС'
+      taxSum: 0         // руб.
     };
-    // Определяем категорию для КАЖДОГО товара
+    
+    // Позиция может иметь свой tax/taxRate (если API расширят)
+    if (item.tax !== undefined) {
+      const t = String(item.tax).toLowerCase();
+      if (t.includes('18') || t.includes('20')) { rawItem.taxRate = '20%'; }
+      else if (t.includes('10')) { rawItem.taxRate = '10%'; }
+      else if (t.includes('0')) { rawItem.taxRate = '0%'; }
+      else { rawItem.taxRate = 'без НДС'; }
+    } else if (hasAnyVat && sumRub > 0) {
+      // Эвристика: определяем ставку по сумме чека (пропорционально)
+      const totalBase = receipts[idx].nds18 * 5 + receipts[idx].nds10 * 10 + receipts[idx].nds0 + receipts[idx].ndsNo;
+      if (totalBase <= 0) {
+        rawItem.taxRate = 'без НДС';
+      } else {
+        // Доля позиции в налоговой базе чека
+        const share = sumRub / Math.max(totalBase, 1);
+        if (share >= 0.9 && receipts[idx].nds18 > 0) rawItem.taxRate = '20%';
+        else if (share >= 0.4 && receipts[idx].nds10 > 0) rawItem.taxRate = '10%';
+        else if (receipts[idx].nds0 > 0) rawItem.taxRate = '0%';
+        else rawItem.taxRate = 'без НДС';
+      }
+    } else {
+      rawItem.taxRate = 'без НДС';
+    }
+    
+    // Сумма налога для позиции
+    if (rawItem.taxRate === '20%') rawItem.taxSum = +(sumRub * 20 / 120).toFixed(2);
+    else if (rawItem.taxRate === '10%') rawItem.taxSum = +(sumRub * 10 / 110).toFixed(2);
+    else rawItem.taxSum = 0;
+    
     rawItem.category = autoDetectCategory([rawItem]);
     return rawItem;
   });
@@ -843,7 +887,9 @@ function build1CJson(receipts) {
       quantity: Number(item.quantity || 1),
       price: Number(item.price || 0),
       sum: Number(item.sum || 0),
-      category: getCategoryName(item.category || 'uncategorized')
+      category: getCategoryName(item.category || 'uncategorized'),
+      taxRate: String(item.taxRate || 'без НДС'),   // ← новое
+      taxSum: Number(item.taxSum || 0)               // ← новое
     }));
     
     result.push({
@@ -857,6 +903,10 @@ function build1CJson(receipts) {
       cashier: receipt.cashier,
       category: getCategoryName(receipt.category || 'uncategorized'),
       paymentMethod: receipt.paymentMethod,
+      nds18: Number(receipt.nds18 || 0),   // ← новое (уровень чека)
+      nds10: Number(receipt.nds10 || 0),   // ← новое
+      nds0: Number(receipt.nds0 || 0),     // ← новое
+      ndsNo: Number(receipt.ndsNo || 0),   // ← новое
       qr: receipt.qr,
       items: items
     });
@@ -866,11 +916,12 @@ function build1CJson(receipts) {
 
 function build1CText(receipts) {
   let txtContent = '#1C:UNF\n';
-  txtContent += '#Version:1.0\n';
-  txtContent += '#ScannerVersion:16.0\n';
+  txtContent += '#Version:1.1\n';  // ← bumped minor version
+  txtContent += '#ScannerVersion:17.0\n';
   txtContent += '#Encoding:UTF-8\n';
   txtContent += '#Separator:;\n';
-  txtContent += '#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,QRString\n\n';
+  txtContent += '#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,TaxRate,TaxSum,QRString\n\n';
+  
   receipts.forEach(function (receipt) {
     const date = String(receipt.date || '');
     const total = String(receipt.total || '0.00');
@@ -885,16 +936,23 @@ function build1CText(receipts) {
     
     if (receipt.items && receipt.items.length > 0) {
       receipt.items.forEach(function (item) {
-        // Берем категорию КОНКРЕТНОГО ТОВАРА
         const category = getCategoryName(item.category || receipt.category || 'uncategorized');
         const name = String(item.name || 'Товар').replace(/;/g, ',').replace(/"/g, '""');
         const qty = String(item.quantity || 1);
         const price = String(item.price || '0.00');
-                txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';"' + name + '";' + qty + ';' + price + ';' + qr + ';v16.0\n';
+        const taxRate = String(item.taxRate || 'без НДС');
+        const taxSum = String(item.taxSum != null ? Number(item.taxSum).toFixed(2) : '0.00');
+        
+        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' 
+                    + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' 
+                    + paymentMethod + ';\"' + name + '\";' + qty + ';' + price + ';' 
+                    + taxRate + ';' + taxSum + ';' + qr + ';v17.0\n';
       });
     } else {
       const category = getCategoryName(receipt.category || 'uncategorized');
-      txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';"Без детализации";1;' + total + ';' + qr + '\n';
+      txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' 
+                  + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' 
+                  + paymentMethod + ';\"Без детализации\";1;' + total + ';без НДС;0.00;' + qr + '\n';
     }
   });
   return txtContent;
@@ -1059,6 +1117,16 @@ function renderLastReceipt() {
     if (receipt.ecashTotalSum > 0) html += ' (карта: ' + receipt.ecashTotalSum.toFixed(2) + ')';
     html += '</div>';
   }
+  // === НДС уровня чека ===
+  if (receipt.nds18 > 0 || receipt.nds10 > 0 || receipt.nds0 > 0 || receipt.ndsNo > 0) {
+    let vatHtml = '<div class="lr-info" style="color:#666;">📊 НДС:';
+    if (receipt.nds18 > 0) vatHtml += ' 20%: ' + receipt.nds18.toFixed(2);
+    if (receipt.nds10 > 0) vatHtml += ' · 10%: ' + receipt.nds10.toFixed(2);
+    if (receipt.nds0 > 0) vatHtml += ' · 0%: ' + receipt.nds0.toFixed(2);
+    if (receipt.ndsNo > 0) vatHtml += ' · без НДС: ' + receipt.ndsNo.toFixed(2);
+    vatHtml += '</div>';
+    html += vatHtml;
+  }
   html += '<select class="lr-cat" onchange="updateCategory(' + realIndex + ', this.value)">';
   currentCategories.forEach(cat => {
     const selected = receipt.category === cat.id ? 'selected' : '';
@@ -1074,7 +1142,11 @@ function renderLastReceipt() {
       html += '<span>' + item.quantity + ' шт.</span>';
       html += '<span style="color:#4CAF50;font-weight:600;">' + item.sum + ' ₽</span>';
       html += '</div>';
-      html += '<div style="font-size:11px;color:#888;margin-top:-4px;margin-bottom:4px;">' + itemCatName + '</div>';
+      // === Категория + НДС позиции ===
+      html += '<div style="font-size:11px;color:#888;margin-top:-4px;margin-bottom:4px;">' 
+            + itemCatName 
+            + (item.taxRate ? ' · НДС ' + item.taxRate + (item.taxSum > 0 ? ' (' + item.taxSum.toFixed(2) + ' ₽)' : '') : '')
+            + '</div>';
     });
     html += '</div>';
   } else if (receipt.status === 'pending') {
@@ -1150,6 +1222,16 @@ function renderReceiptsList() {
       if (receipt.paymentMethod) {
         html += '<div class="info">💰 ' + getPaymentMethodName(receipt.paymentMethod) + '</div>';
       }
+      // === НДС уровня чека ===
+      if (receipt.nds18 > 0 || receipt.nds10 > 0 || receipt.nds0 > 0 || receipt.ndsNo > 0) {
+        let vatHtml = '<div class="info" style="color:#666;">📊 НДС:';
+        if (receipt.nds18 > 0) vatHtml += ' 20%: ' + receipt.nds18.toFixed(2);
+        if (receipt.nds10 > 0) vatHtml += ' · 10%: ' + receipt.nds10.toFixed(2);
+        if (receipt.nds0 > 0) vatHtml += ' · 0%: ' + receipt.nds0.toFixed(2);
+        if (receipt.ndsNo > 0) vatHtml += ' · без НДС: ' + receipt.ndsNo.toFixed(2);
+        vatHtml += '</div>';
+        html += vatHtml;
+      }
       html += '<select class="cat-select" onchange="event.stopPropagation();updateCategory(' + realIndex + ', this.value)">';
       currentCategories.forEach(cat => {
         const selected = receipt.category === cat.id ? 'selected' : '';
@@ -1165,7 +1247,11 @@ function renderReceiptsList() {
           html += '<span>' + item.quantity + ' шт.</span>';
           html += '<span style="font-weight:600;color:#4CAF50;">' + item.sum + ' ₽</span>';
           html += '</div>';
-          html += '<div style="font-size:11px;color:#888;margin-top:-4px;margin-bottom:4px;">' + itemCatName + '</div>';
+          // === Категория + НДС позиции ===
+          html += '<div style="font-size:11px;color:#888;margin-top:-4px;margin-bottom:4px;">' 
+                + itemCatName 
+                + (item.taxRate ? ' · НДС ' + item.taxRate + (item.taxSum > 0 ? ' (' + item.taxSum.toFixed(2) + ' ₽)' : '') : '')
+                + '</div>';
         });
         html += '</div>';
       } else if (receipt.status === 'pending') {
@@ -1294,7 +1380,7 @@ function updateCacheInfo() {
     diag.innerHTML = 'Отправитель: ' + (d || '(не задан)') +
       (d && d !== u ? ' (папка: ' + u + ')' : '') +
       '<br><br>Адрес отправки:<br>' + SENDER_URLS[0] +
-      '<br><br>Версия: v16.0<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
+      '<br><br>Версия: v17.0<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
   }
 }
 
