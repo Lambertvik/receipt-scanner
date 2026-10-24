@@ -10,53 +10,193 @@
 <meta name="apple-mobile-web-app-title" content="Сканер чеков">
 <title>Сканер чеков ФНС</title>
 <style>
+/* =====================================================================
+   ОБЩИЕ СТИЛИ
+   ===================================================================== */
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 12px; touch-action: manipulation; } /* touch-action для лучшей реакции */
-.container { background: white; border-radius: 18px; padding: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); max-width: 600px; margin: 0 auto; }
+
+body { 
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; 
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+    min-height: 100vh; 
+    padding: 12px; 
+    /* Важно для мобильной адаптации */
+    touch-action: manipulation; 
+}
+
+.container { 
+    background: white; 
+    border-radius: 18px; 
+    padding: 16px; 
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3); 
+    max-width: 600px; 
+    margin: 0 auto; 
+}
+
 h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 
-.status-bar { background: #e3f2fd; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; color: #1565c0; text-align: center; line-height: 1.5; }
-.alert-banner { display: none; background: #fee4e2; color: #b42318; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; text-align: center; }
+.status-bar { 
+    background: #e3f2fd; 
+    padding: 10px; 
+    border-radius: 8px; 
+    margin-bottom: 10px; 
+    font-size: 13px; 
+    color: #1565c0; 
+    text-align: center; 
+    line-height: 1.5; 
+}
 
-.video-container { position: relative; width: 100%; border-radius: 12px; overflow: hidden; background: #000; margin-bottom: 12px; display: none; }
+.alert-banner { 
+    display: none; 
+    background: #fee4e2; 
+    color: #b42318; 
+    padding: 10px; 
+    border-radius: 8px; 
+    margin-bottom: 10px; 
+    font-size: 13px; 
+    text-align: center; 
+}
+
+/* =====================================================================
+   ВИДЕО / КАМЕРА
+   ===================================================================== */
+.video-container { 
+    position: relative; 
+    width: 100%; 
+    border-radius: 12px; 
+    overflow: hidden; 
+    background: #000; 
+    margin-bottom: 12px; 
+    display: none; 
+}
 .video-container.active { display: block; }
-#video { width: 100%; display: block; }
-.scan-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 250px; height: 250px; border: 3px solid #4CAF50; border-radius: 12px; pointer-events: none; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); }
-.scan-line { position: absolute; width: 100%; height: 3px; background: #4CAF50; animation: scan 2s linear infinite; box-shadow: 0 0 10px #4CAF50; }
-@keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
 
-.button { display: block; width: 100%; padding: 16px; margin: 8px 0; font-size: 16px; font-weight: bold; border: none; border-radius: 12px; cursor: pointer; transition: all 0.2s; }
+#video { width: 100%; display: block; }
+
+.scan-overlay { 
+    position: absolute; 
+    top: 50%; left: 50%; 
+    transform: translate(-50%, -50%); 
+    width: 250px; height: 250px; 
+    border: 3px solid #4CAF50; 
+    border-radius: 12px; 
+    pointer-events: none; 
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); 
+}
+
+.scan-line { 
+    position: absolute; 
+    width: 100%; height: 3px; 
+    background: #4CAF50; 
+    animation: scan 2s linear infinite; 
+    box-shadow: 0 0 10px #4CAF50; 
+}
+
+@keyframes scan { 
+    0% { top: 0; } 
+    100% { top: 100%; } 
+}
+
+/* =====================================================================
+   КНОПКИ
+   ===================================================================== */
+.button { 
+    display: block; 
+    width: 100%; 
+    padding: 16px; 
+    margin: 8px 0; 
+    font-size: 16px; 
+    font-weight: bold; 
+    border: none; 
+    border-radius: 12px; 
+    cursor: pointer; 
+    transition: all 0.2s; 
+}
 .button:active { transform: scale(0.98); }
 .button:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .btn-scan { background: #4CAF50; color: white; font-size: 18px; padding: 20px; }
 .btn-scan.scanning { background: #ff9800; }
+
 .btn-send { background: #FF7F3F; color: white; font-size: 18px; padding: 20px; }
 .btn-send:disabled { background: #ccc; }
+
 .btn-secondary { background: #2196F3; color: white; }
 .btn-sm { padding: 10px; font-size: 14px; margin: 6px 0; }
 
-.section-title { display: flex; justify-content: space-between; align-items: center; padding: 12px 10px; background: #f5f5f5; border-radius: 10px; margin-top: 14px; cursor: pointer; user-select: none; }
+/* =====================================================================
+   СПИСКИ ЧЕКОВ (ОБЩИЕ)
+   ===================================================================== */
+.section-title { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    padding: 12px 10px; 
+    background: #f5f5f5; 
+    border-radius: 10px; 
+    margin-top: 14px; 
+    cursor: pointer; 
+    user-select: none; 
+}
 .section-title:active { background: #e8e8e8; }
 .section-title .title { font-size: 14px; font-weight: bold; color: #333; }
 .section-title .arrow { font-size: 18px; color: #666; transition: transform 0.2s; }
 .section-title.expanded .arrow { transform: rotate(90deg); }
 
-.last-receipt { margin-top: 10px; background: #f8f9fa; border-left: 4px solid #4CAF50; border-radius: 8px; padding: 14px; font-size: 13px; }
+/* =====================================================================
+   ПОСЛЕДНИЙ ЧЕК (ВЕРХНИЙ БЛОК)
+   ===================================================================== */
+.last-receipt { 
+    margin-top: 10px; 
+    background: #f8f9fa; 
+    border-left: 4px solid #4CAF50; 
+    border-radius: 8px; 
+    padding: 14px; 
+    font-size: 13px; 
+}
 .last-receipt.pending { border-left-color: #ff9800; }
 .last-receipt.sent { border-left-color: #2196F3; }
-.last-receipt .lr-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: bold; font-size: 14px; color: #333; }
+
+.last-receipt .lr-header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    margin-bottom: 8px; 
+    font-weight: bold; 
+    font-size: 14px; 
+    color: #333; 
+}
 .last-receipt .lr-sum { font-size: 20px; color: #111; font-weight: 800; margin-bottom: 8px; }
 .last-receipt .lr-badge { font-size: 12px; margin-left: 6px; }
 .last-receipt .lr-info { color: #555; margin-bottom: 5px; word-break: break-word; line-height: 1.4; }
 .last-receipt .lr-items { background: white; padding: 10px; border-radius: 6px; margin-top: 8px; }
-.last-receipt .lr-item-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; font-size: 12px; gap: 8px; }
+.last-receipt .lr-item-row { 
+    display: flex; 
+    justify-content: space-between; 
+    padding: 5px 0; 
+    border-bottom: 1px solid #eee; 
+    font-size: 12px; 
+    gap: 8px; 
+}
 .last-receipt .lr-item-row:last-child { border-bottom: none; }
-.last-receipt .lr-item-cat { color: #888; font-size: 11px; margin-left: 4px; }
-.last-receipt .lr-nds { color: #666; font-size: 11px; margin-left: 4px; }
-.last-receipt .lr-cat { width: 100%; padding: 8px; border: 1px solid #ff9800; border-radius: 6px; font-size: 13px; margin-top: 10px; background: white; }
+.last-receipt .lr-cat { 
+    width: 100%; 
+    padding: 8px; 
+    border: 1px solid #ff9800; 
+    border-radius: 6px; 
+    font-size: 13px; 
+    margin-top: 10px; 
+    background: white; 
+}
 
-/* === БЛОК QR С ЛУПОЙ === */
-.qr-block-wrapper { position: relative; margin-top: 8px; }
+/* =====================================================================
+   БЛОК QR С ЛУПОЙ (ИСПРАВЛЕННЫЙ CSS)
+   ===================================================================== */
+.qr-block-wrapper { 
+    position: relative; 
+    margin-top: 8px; 
+}
+
 .lr-qr, .qr-str { 
     font-family: monospace; 
     font-size: 10px; 
@@ -65,10 +205,13 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
     padding: 8px; 
     border-radius: 4px; 
     word-break: break-all; 
-    cursor: crosshair; /* Курсор подсказывает интерактивность */
-    position: relative;
-    z-index: 1;
+    cursor: crosshair; 
+    position: relative; 
+    z-index: 1; 
+    /* ГЛАВНОЕ ИСПРАВЛЕНИЕ ДЛЯ МОБИЛЬНОЙ ЛУПЫ */
+    touch-action: none; 
 }
+
 .copy-btn-inline {
     position: absolute;
     right: 5px;
@@ -84,7 +227,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 }
 .copy-btn-inline:active { background: #ddd; }
 
-/* Сама лупа */
+/* Сама линза (круглое окно поверх всего) */
 .magnifier-lens {
     position: fixed;
     width: 120px;
@@ -113,10 +256,30 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
     background: transparent;
 }
 
-.receipts-list { margin-top: 8px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+/* =====================================================================
+   ОСТАЛЬНЫЕ ЧЕКИ (СПИСОК НИЖЕ)
+   ===================================================================== */
+.receipts-list { 
+    margin-top: 8px; 
+    max-height: 0; 
+    overflow: hidden; 
+    transition: max-height 0.3s ease; 
+}
 .receipts-list.expanded { max-height: 8000px; }
 
-.receipt-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; margin: 6px 0; background: #f8f9fa; border-left: 4px solid #4CAF50; border-radius: 6px; cursor: pointer; font-size: 14px; gap: 8px; }
+.receipt-row { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    padding: 10px 12px; 
+    margin: 6px 0; 
+    background: #f8f9fa; 
+    border-left: 4px solid #4CAF50; 
+    border-radius: 6px; 
+    cursor: pointer; 
+    font-size: 14px; 
+    gap: 8px; 
+}
 .receipt-row:active { background: #eef1f3; }
 .receipt-row.pending { border-left-color: #ff9800; }
 .receipt-row.sent { border-left-color: #2196F3; }
@@ -124,19 +287,54 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .receipt-row .sum { color: #111; font-weight: 700; white-space: nowrap; }
 .receipt-row .badge { font-size: 12px; white-space: nowrap; }
 
-.receipt-detail { background: #f8f9fa; border-left: 4px solid #4CAF50; border-radius: 6px; padding: 12px; margin: 6px 0; font-size: 13px; }
+.receipt-detail { 
+    background: #f8f9fa; 
+    border-left: 4px solid #4CAF50; 
+    border-radius: 6px; 
+    padding: 12px; 
+    margin: 6px 0; 
+    font-size: 13px; 
+}
 .receipt-detail.pending { border-left-color: #ff9800; }
 .receipt-detail.sent { border-left-color: #2196F3; }
-.receipt-detail .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: bold; }
-.receipt-detail .btn-delete { background: #f44336; color: white; border: none; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; cursor: pointer; flex-shrink: 0; }
+.receipt-detail .detail-header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    margin-bottom: 8px; 
+    font-weight: bold; 
+}
+.receipt-detail .btn-delete { 
+    background: #f44336; 
+    color: white; 
+    border: none; 
+    border-radius: 50%; 
+    width: 28px; 
+    height: 28px; 
+    font-size: 14px; 
+    cursor: pointer; 
+    flex-shrink: 0; 
+}
 .receipt-detail .detail-sum { font-size: 18px; font-weight: bold; margin-bottom: 8px; }
 .receipt-detail .info { color: #555; margin-bottom: 4px; word-break: break-word; }
 .receipt-detail .items { background: white; padding: 8px; border-radius: 4px; margin-top: 6px; }
-.receipt-detail .item-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee; font-size: 12px; gap: 8px; }
+.receipt-detail .item-row { 
+    display: flex; 
+    justify-content: space-between; 
+    padding: 4px 0; 
+    border-bottom: 1px solid #eee; 
+    font-size: 12px; 
+    gap: 8px; 
+}
 .receipt-detail .item-row:last-child { border-bottom: none; }
-.receipt-detail .item-cat { color: #888; font-size: 11px; margin-left: 4px; }
-.receipt-detail .item-nds { color: #666; font-size: 11px; margin-left: 4px; }
-.receipt-detail .cat-select { width: 100%; padding: 6px; border: 1px solid #ff9800; border-radius: 4px; font-size: 12px; margin-top: 8px; }
+.receipt-detail .cat-select { 
+    width: 100%; 
+    padding: 6px; 
+    border: 1px solid #ff9800; 
+    border-radius: 4px; 
+    font-size: 12px; 
+    margin-top: 8px; 
+}
 
 .empty-state { text-align: center; padding: 24px 12px; color: #999; font-style: italic; font-size: 13px; }
 .bottom-buttons { display: flex; gap: 8px; margin-top: 12px; }
@@ -145,11 +343,51 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .stats-small b { color: #333; }
 .footer { text-align: center; margin-top: 16px; color: rgba(255,255,255,0.8); font-size: 11px; }
 
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 12px; }
+/* =====================================================================
+   МОДАЛЬНЫЕ ОКНА (НАСТРОЙКИ, ЛОГ, SETUP)
+   ===================================================================== */
+.modal-overlay { 
+    position: fixed; 
+    inset: 0; 
+    background: rgba(0,0,0,0.6); 
+    z-index: 1000; 
+    display: none; 
+    align-items: center; 
+    justify-content: center; 
+    padding: 12px; 
+}
 .modal-overlay.active { display: flex; }
-.modal { background: white; border-radius: 16px; width: 100%; max-width: 600px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
-.modal-header { padding: 14px 16px; background: #667eea; color: white; font-size: 18px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
-.modal-header .close { background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; font-size: 20px; cursor: pointer; }
+
+.modal { 
+    background: white; 
+    border-radius: 16px; 
+    width: 100%; 
+    max-width: 600px; 
+    max-height: 90vh; 
+    display: flex; 
+    flex-direction: column; 
+    overflow: hidden; 
+}
+.modal-header { 
+    padding: 14px 16px; 
+    background: #667eea; 
+    color: white; 
+    font-size: 18px; 
+    font-weight: bold; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+}
+.modal-header .close { 
+    background: rgba(255,255,255,0.2); 
+    border: none; 
+    color: white; 
+    width: 32px; 
+    height: 32px; 
+    border-radius: 50%; 
+    font-size: 20px; 
+    cursor: pointer; 
+}
 .modal-body { padding: 14px 16px; overflow-y: auto; flex: 1; }
 .modal-footer { padding: 12px 16px; border-top: 1px solid #eee; display: flex; gap: 8px; }
 .modal-footer .button { flex: 1; margin: 0; }
@@ -164,12 +402,19 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .settings-group { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #eee; }
 .settings-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 .settings-group label { font-size: 13px; font-weight: bold; color: #333; display: block; margin-bottom: 6px; }
-.settings-group select, .settings-group textarea, .settings-group input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+.settings-group select, .settings-group textarea, .settings-group input[type="text"] { 
+    width: 100%; 
+    padding: 10px; 
+    border: 1px solid #ccc; 
+    border-radius: 6px; 
+    font-size: 14px; 
+}
 .settings-group textarea { font-family: monospace; font-size: 12px; resize: vertical; min-height: 70px; }
 .settings-group .hint { font-size: 11px; color: #888; margin-top: 4px; }
 </style>
 </head>
 <body>
+
 <div class="container">
   <h1>🛒 Сканер чеков ФНС</h1>
 
@@ -209,8 +454,9 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <div class="magnifier-inner" id="magnifierInner"></div>
 </div>
 
-<div class="footer">v17.7 | offline-first · категории · НДС по позициям · Мобильная лупа (прижми палец)</div>
+<div class="footer">v17.8 | offline-first · категории · НДС по позициям · Мобильная лупа (исправленная)</div>
 
+<!-- Модальное окно первого запуска -->
 <div class="modal-overlay" id="setupModal">
   <div class="modal" style="max-width: 420px;">
     <div class="modal-header"><span>👋 Первый запуск</span></div>
@@ -228,6 +474,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   </div>
 </div>
 
+<!-- Модальное окно лога -->
 <div class="modal-overlay" id="logModal">
   <div class="modal">
     <div class="modal-header"><span>📜 Лог</span><button class="close" onclick="closeLog()">×</button></div>
@@ -239,6 +486,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   </div>
 </div>
 
+<!-- Модальное окно настроек -->
 <div class="modal-overlay" id="settingsModal">
   <div class="modal">
     <div class="modal-header"><span>⚙️ Настройки</span><button class="close" onclick="closeSettings()">×</button></div>
@@ -300,12 +548,14 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 <script src="jsQR.js"></script>
 <script>
 // =====================================================================
-// КОНФИГ И НАСТРОЙКИ
+// КОНФИГУРАЦИЯ И НАСТРОЙКИ
 // =====================================================================
 const DEFAULT_API_TOKEN = "53441.ZLqLc0Gvo8gziNZXF";
 const CATEGORIES_URL = 'https://lambertvik.github.io/receipt-scanner/categories.json';
 
 let currentApiToken = localStorage.getItem('api_token') || DEFAULT_API_TOKEN;
+
+// Дефолтные категории (если нет в localStorage)
 let currentCategories = JSON.parse(localStorage.getItem('custom_categories') || '[]');
 if (currentCategories.length === 0) {
     currentCategories = [
@@ -323,19 +573,19 @@ if (currentCategories.length === 0) {
     localStorage.setItem('custom_categories', JSON.stringify(currentCategories));
 }
 
-const DAILY_API_LIMIT = 15;
-const AUTO_RETRY_MINUTES = 2;
-const LOCAL_TIMEOUT_MS = 3000;
-const SENDER_URLS = [ 'https://synology-flat11.taila10dc4.ts.net:8443/upload' ];
+const DAILY_API_LIMIT = 15;       // Лимит запросов к API в день
+const AUTO_RETRY_MINUTES = 2;     // Интервал автоповтора
+const LOCAL_TIMEOUT_MS = 3000;    // Таймаут отправки на NAS
+const SENDER_URLS = [ 'https://synology-flat11.taila10dc4.ts.net:8443/upload' ]; // Адреса загрузки
 
+// Переменные состояния камеры и процесса
 let isProcessing = false;
 let lastScanTime = 0;
-const SCAN_COOLDOWN = 3000;
+const SCAN_COOLDOWN = 3000; // Защита от двойного скана
 let video = document.getElementById('video');
 let canvas = document.createElement('canvas');
 let context = canvas.getContext('2d');
 let scanning = false;
-let scanTimeout = null;
 let stream = null;
 let autoRetryIntervalId = null;
 let receiptsExpanded = false;
@@ -343,7 +593,7 @@ let expandedIndex = null;
 let lastSectionExpanded = true;
 
 // =====================================================================
-// ХРАНИЛИЩЕ
+// РАБОТА С ХРАНИЛИЩЕМ (LOCALSTORAGE)
 // =====================================================================
 function getReceipts() { return JSON.parse(localStorage.getItem('receipts') || '[]'); }
 function setReceipts(a) { localStorage.setItem('receipts', JSON.stringify(a)); }
@@ -352,13 +602,13 @@ function setCache(o) { localStorage.setItem('receipts_cache', JSON.stringify(o))
 
 function getSenderUser() { return localStorage.getItem('sender_user') || ''; }
 function setSenderUser(u) { localStorage.setItem('sender_user', u); }
-
 function getSenderDisplay() {
   const d = localStorage.getItem('sender_display');
   const u = getSenderUser();
   return d || u || '';
 }
 
+// Транслитерация для имен папок
 const TRANSLIT_MAP = {
   'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z',
   'и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r',
@@ -430,7 +680,7 @@ function getCategoryName(categoryId) {
 }
 
 // =====================================================================
-// РАБОТА С КАТЕГОРИЯМИ
+// РАБОТА С КАТЕГОРИЯМИ (СЕРВЕР / ЭКСПОРТ)
 // =====================================================================
 async function loadCategoriesFromServer() {
   if (!navigator.onLine) { addLog('📴 Офлайн: используем локальные категории', 'info'); return; }
@@ -528,23 +778,27 @@ function promptForItemCategory(receiptIndex, itemIndex, itemName) {
 }
 
 // =====================================================================
-// СТАРТ
+// СТАРТ ПРИЛОЖЕНИЯ
 // =====================================================================
 window.onload = function () {
   showSetupIfNeeded();
   const setupInput = document.getElementById('setupName');
   if (setupInput) { setupInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') saveSetupName(); }); }
+  
   renderLastReceipt();
   renderReceiptsList();
   updateCacheInfo();
-  addLog('✅ Сканер готов (v17.7), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
+  addLog('✅ Сканер готов (v17.8), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
   registerSW();
+  
   loadExportFormat();
   loadCategoriesFromServer();
+  
   if (navigator.onLine && getSenderUser()) {
     const pending = getReceipts().filter(r => r.status === 'pending').length;
     if (pending > 0) { addLog('🌐 Найдено pending: ' + pending + ', проверю через 2 сек', 'info'); setTimeout(autoSync, 2000); }
   } else if (!navigator.onLine) { addLog('📴 Офлайн: чеки сохранятся', 'info'); }
+  
   startAutoRetryTimer();
 };
 
@@ -601,7 +855,6 @@ function stopScan() { stopCamera(); }
 function stopCamera() {
   scanning = false;
   if (stream) { stream.getTracks().forEach(track => track.stop()); stream = null; }
-  if (scanTimeout) { clearTimeout(scanTimeout); scanTimeout = null; }
   const btn = document.getElementById('scanBtn');
   btn.textContent = '📷 Начать сканирование'; btn.classList.remove('scanning');
   document.getElementById('videoContainer').classList.remove('active');
@@ -620,7 +873,7 @@ function tick() {
 }
 
 // =====================================================================
-// РАСПОЗНАВАНИЕ
+// РАСПОЗНАВАНИЕ ЧЕКА (QR -> API)
 // =====================================================================
 async function handleScan(qrData) {
   if (isProcessing) return;
@@ -678,7 +931,7 @@ async function handleScan(qrData) {
 }
 
 // =====================================================================
-// PENDING → OK (+ НДС v17.7 PARSE HTML EXACT RATES)
+// ОБРАБОТКА ОТВЕТА API (+ НДС ИЗ HTML)
 // =====================================================================
 function parseVatFromHtml(htmlStr) {
   const results = [];
@@ -785,7 +1038,7 @@ async function retryPending(showAlert) {
 }
 
 // =====================================================================
-// ОТПРАВКА НА NAS
+// ОТПРАВКА НА NAS (FORM DATA)
 // =====================================================================
 function build1CJson(receipts) {
   const result = [];
@@ -810,7 +1063,7 @@ function build1CJson(receipts) {
 }
 
 function build1CText(receipts) {
-  let txtContent = '#1C:UNF\n#Version:1.1\n#ScannerVersion:17.7\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,TaxRate,TaxSum,QRString\n\n';
+  let txtContent = '#1C:UNF\n#Version:1.1\n#ScannerVersion:17.8\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,TaxRate,TaxSum,QRString\n\n';
   receipts.forEach(function (receipt) {
     const date = String(receipt.date || '');
     const total = String(receipt.total || '0.00');
@@ -830,7 +1083,7 @@ function build1CText(receipts) {
         const price = String(item.price || '0.00');
         const taxRate = String(item.taxRate || 'без НДС');
         const taxSum = String(item.taxSum != null ? Number(item.taxSum).toFixed(2) : '0.00');
-        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';\"' + name + '\";' + qty + ';' + price + ';' + taxRate + ';' + taxSum + ';' + qr + ';v17.7\n';
+        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';\"' + name + '\";' + qty + ';' + price + ';' + taxRate + ';' + taxSum + ';' + qr + ';v17.8\n';
       });
     } else {
       const category = getCategoryName(receipt.category || 'uncategorized');
@@ -911,7 +1164,7 @@ function exportTo1C() {
 }
 
 // =====================================================================
-// ПОСЛЕДНИЙ ЧЕК
+// РЕНДЕР ИНТЕРФЕЙСА (UI)
 // =====================================================================
 function toggleLastSection() {
   lastSectionExpanded = !lastSectionExpanded;
@@ -980,7 +1233,6 @@ function renderLastReceipt() {
     html += '<div style="font-size:12px;color:#ff9800;margin-top:6px;">⏳ Состав появится после проверки API</div>';
   }
   if (receipt.qr) {
-    // === БЛОК QR С ЛУПОЙ ===
     html += '<div class="qr-block-wrapper">';
     html += '<button class="copy-btn-inline" onclick="event.stopPropagation(); copyTextDirect(\'' + encodeURIComponent(receipt.qr) + '\')">📋 Копировать</button>';
     html += '<div class="lr-qr" data-qr-text="' + encodeURIComponent(receipt.qr) + '">' + receipt.qr + '</div>';
@@ -989,14 +1241,9 @@ function renderLastReceipt() {
   div.innerHTML = html;
   box.innerHTML = '';
   box.appendChild(div);
-  
-  // Привязываем обработчики лупы ко всем новым элементам .lr-qr
   attachMagnifierHandlers(box.querySelectorAll('.lr-qr'));
 }
 
-// =====================================================================
-// ОСТАЛЬНЫЕ ЧЕКИ
-// =====================================================================
 function toggleReceiptsSection() {
   receiptsExpanded = !receiptsExpanded;
   expandedIndex = null;
@@ -1072,7 +1319,6 @@ function renderReceiptsList() {
         html += '<div style="font-size:12px;color:#ff9800;margin-top:6px;">⏳ Состав появится после проверки API</div>';
       }
       if (receipt.qr) {
-        // === БЛОК QR С ЛУПОЙ ===
         html += '<div class="qr-block-wrapper">';
         html += '<button class="copy-btn-inline" onclick="event.stopPropagation(); copyTextDirect(\'' + encodeURIComponent(receipt.qr) + '\')">📋 Копировать</button>';
         html += '<div class="qr-str" data-qr-text="' + encodeURIComponent(receipt.qr) + '">' + receipt.qr + '</div>';
@@ -1084,7 +1330,6 @@ function renderReceiptsList() {
         toggleReceiptDetail(realIndex);
       };
       list.appendChild(div);
-      // Привязываем обработчики лупы
       attachMagnifierHandlers(list.querySelectorAll('.qr-str'));
     } else {
       const div = document.createElement('div');
@@ -1140,7 +1385,7 @@ function updateCategory(index, categoryId) {
 }
 
 // =====================================================================
-// СТАТУС И СЧЁТЧИКИ
+// СТАТУС И ДИАГНОСТИКА
 // =====================================================================
 function updateCacheInfo() {
   const receipts = getReceipts();
@@ -1159,12 +1404,12 @@ function updateCacheInfo() {
   const diag = document.getElementById('diagInfo');
   if (diag) {
     const d = getSenderDisplay(); const u = getSenderUser();
-    diag.innerHTML = 'Отправитель: ' + (d || '(не задан)') + (d && d !== u ? ' (папка: ' + u + ')' : '') + '<br><br>Адрес отправки:<br>' + SENDER_URLS[0] + '<br><br>Версия: v17.7<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
+    diag.innerHTML = 'Отправитель: ' + (d || '(не задан)') + (d && d !== u ? ' (папка: ' + u + ')' : '') + '<br><br>Адрес отправки:<br>' + SENDER_URLS[0] + '<br><br>Версия: v17.8<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
   }
 }
 
 // =====================================================================
-// ЛОГ
+// ЛОГ СОБЫТИЙ
 // =====================================================================
 let logEntries = [];
 function addLog(message, type) {
@@ -1195,7 +1440,7 @@ function copyLog() {
 function clearLog() { logEntries = []; renderLog(); }
 
 // =====================================================================
-// НАСТРОЙКИ
+// НАСТРОЙКИ (МОДАЛЬНОЕ ОКНО)
 // =====================================================================
 function openSettings() {
   updateCacheInfo();
@@ -1310,7 +1555,7 @@ function extractQRParam(qrData, paramName) {
 }
 
 // =====================================================================
-// ЛУПА (MOBILE LOUPE)
+// МОБИЛЬНАЯ ЛУПА (TOUCH EVENTS)
 // =====================================================================
 const lens = document.getElementById('magnifierLens');
 const inner = document.getElementById('magnifierInner');
@@ -1336,18 +1581,13 @@ function onLensStart(e) {
   activeTarget = e.currentTarget;
   targetRect = activeTarget.getBoundingClientRect();
   
-  // Получаем текст
   const encodedText = activeTarget.getAttribute('data-qr-text');
   const fullText = decodeURIComponent(encodedText);
   
-  // Настраиваем внутренности линзы
   inner.innerText = fullText;
   inner.style.fontSize = (originalFontSize * ZOOM_FACTOR) + 'px';
   
-  // Показываем линзу
   lens.style.display = 'block';
-  
-  // Немедленно позиционируем
   updateLensPosition(e.touches[0].clientX, e.touches[0].clientY);
 }
 
@@ -1368,42 +1608,20 @@ function onLensEnd(e) {
 function updateLensPosition(clientX, clientY) {
   if (!targetRect) return;
 
-  // Позиция линзы относительно экрана
   lens.style.left = clientX + 'px';
   lens.style.top = clientY + 'px';
 
-  // Вычисляем, какой кусок текста находится под пальцем
-  // Координаты пальца внутри блока текста
   const relX = clientX - targetRect.left;
   const relY = clientY - targetRect.top;
 
-  // Границы блока текста
-  const w = targetRect.width;
-  const h = targetRect.height;
-
-  // Процентное положение курсора внутри блока (0..100%)
-  // Но нам нужно сместить background-position так, чтобы центр линзы совпал с точкой касания
-  // Линза имеет радиус 60px (диаметр 120px).
-  // Мы хотим показать область вокруг точки (relX, relY).
+  const offsetX = -(relX * ZOOM_FACTOR) + 60; 
+  const offsetY = -(relY * ZOOM_FACTOR) + 60; 
   
-  // Простая эвристика для mobile loupe:
-  // background-position X = -(relX * ZOOM_FACTOR) + (LensRadius / ZOOM_FACTOR?) 
-  // Лучше использовать transform origin или просто offset.
-  
-  // Самый надежный способ для простого div с текстом:
-  // Мы рендерим весь текст в inner. Нам нужно сдвинуть его так, чтобы точка (relX, relY) оригинала оказалась в центре (60, 60) линзы.
-  
-  // Смещение текста внутри линзы:
-  const offsetX = -(relX * ZOOM_FACTOR) + 60; // 60 = половина ширины линзы
-  const offsetY = -(relY * ZOOM_FACTOR) + 60; // 60 = половина высоты линзы
-  
-  // Применяем трансформацию к внутреннему контенту
-  // Используем translate вместо background-position, так как у нас реальный DOM элемент с текстом
   inner.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
 }
 
 // =====================================================================
-// КОПИРОВАНИЕ (ОБЫЧНОЕ, ДЛЯ КНОПКИ)
+// КОПИРОВАНИЕ ТЕКСТА (КНОПКА)
 // =====================================================================
 function copyTextDirect(encodedQr) {
   const qr = decodeURIComponent(encodedQr);
