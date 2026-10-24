@@ -54,7 +54,9 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .last-receipt .lr-item-cat { color: #888; font-size: 11px; margin-left: 4px; }
 .last-receipt .lr-nds { color: #666; font-size: 11px; margin-left: 4px; }
 .last-receipt .lr-cat { width: 100%; padding: 8px; border: 1px solid #ff9800; border-radius: 6px; font-size: 13px; margin-top: 10px; background: white; }
-.last-receipt .lr-qr { font-family: monospace; font-size: 10px; color: #888; background: #eee; padding: 8px; border-radius: 4px; margin-top: 8px; word-break: break-all; }
+.last-receipt .lr-qr { font-family: monospace; font-size: 10px; color: #888; background: #eee; padding: 8px; border-radius: 4px; margin-top: 8px; word-break: break-all; cursor: pointer; position: relative; }
+.last-receipt .lr-qr:hover { background: #ddd; }
+.last-receipt .copy-icon { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; fill: #666; pointer-events: none; }
 
 .receipts-list { margin-top: 8px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
 .receipts-list.expanded { max-height: 8000px; }
@@ -80,7 +82,9 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .receipt-detail .item-cat { color: #888; font-size: 11px; margin-left: 4px; }
 .receipt-detail .item-nds { color: #666; font-size: 11px; margin-left: 4px; }
 .receipt-detail .cat-select { width: 100%; padding: 6px; border: 1px solid #ff9800; border-radius: 4px; font-size: 12px; margin-top: 8px; }
-.receipt-detail .qr-str { font-family: monospace; font-size: 10px; color: #888; background: #eee; padding: 6px; border-radius: 4px; margin-top: 8px; word-break: break-all; }
+.receipt-detail .qr-str { font-family: monospace; font-size: 10px; color: #888; background: #eee; padding: 6px; border-radius: 4px; margin-top: 8px; word-break: break-all; cursor: pointer; position: relative; }
+.receipt-detail .qr-str:hover { background: #ddd; }
+.receipt-detail .copy-icon { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; fill: #666; pointer-events: none; }
 
 .empty-state { text-align: center; padding: 24px 12px; color: #999; font-style: italic; font-size: 13px; }
 
@@ -100,6 +104,12 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 .modal-body { padding: 14px 16px; overflow-y: auto; flex: 1; }
 .modal-footer { padding: 12px 16px; border-top: 1px solid #eee; display: flex; gap: 8px; }
 .modal-footer .button { flex: 1; margin: 0; }
+
+/* === ЛУПА (MODAL ZOOM) === */
+.zoom-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 20px; }
+.zoom-modal.active { display: flex; }
+.zoom-content { background: white; border-radius: 12px; padding: 20px; max-width: 90vw; max-height: 90vh; overflow: auto; font-size: 16px; line-height: 1.6; }
+.zoom-close { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2); border: none; color: white; width: 40px; height: 40px; border-radius: 50%; font-size: 24px; cursor: pointer; }
 
 .log-modal-body { background: #1e1e1e; font-family: 'Courier New', monospace; font-size: 14px; padding: 12px; }
 .log-entry { padding: 8px 10px; margin: 6px 0; border-radius: 6px; line-height: 1.4; word-break: break-word; }
@@ -151,7 +161,13 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <div class="stats-small" id="statsSmall"></div>
 </div>
 
-<div class="footer">v17.5 | offline-first · категории для каждого товара · НДС по позициям (ТОЧНЫЕ СТАВКИ)</div>
+<!-- === ЗУМ-МОДАЛ === -->
+<div class="zoom-modal" id="zoomModal" onclick="closeZoom(event)">
+  <button class="zoom-close" onclick="closeZoom()">&times;</button>
+  <div class="zoom-content" id="zoomContent"></div>
+</div>
+
+<div class="footer">v17.6 | offline-first · категории для каждого товара · НДС по позициям · лупа + копирование QR</div>
 
 <div class="modal-overlay" id="setupModal">
   <div class="modal" style="max-width: 420px;">
@@ -534,7 +550,7 @@ window.onload = function () {
   renderLastReceipt();
   renderReceiptsList();
   updateCacheInfo();
-  addLog('✅ Сканер готов (v17.5), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
+  addLog('✅ Сканер готов (v17.6), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
   registerSW();
 
   loadExportFormat();
@@ -741,7 +757,7 @@ async function handleScan(qrData) {
 }
 
 // =====================================================================
-// PENDING → OK (+ НДС v17.5 PARSE HTML EXACT RATES)
+// PENDING → OK (+ НДС v17.6 PARSE HTML EXACT RATES)
 // =====================================================================
 function parseVatFromHtml(htmlStr) {
   // Извлекаем все ставки НДС из HTML в порядке появления
@@ -955,7 +971,7 @@ function build1CJson(receipts) {
 function build1CText(receipts) {
   let txtContent = '#1C:UNF\n';
   txtContent += '#Version:1.1\n';  // ← bumped minor version
-  txtContent += '#ScannerVersion:17.5\n';
+  txtContent += '#ScannerVersion:17.6\n';
   txtContent += '#Encoding:UTF-8\n';
   txtContent += '#Separator:;\n';
   txtContent += '#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,TaxRate,TaxSum,QRString\n\n';
@@ -984,7 +1000,7 @@ function build1CText(receipts) {
         txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' 
                     + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' 
                     + paymentMethod + ';\"' + name + '\";' + qty + ';' + price + ';' 
-                    + taxRate + ';' + taxSum + ';' + qr + ';v17.5\n';
+                    + taxRate + ';' + taxSum + ';' + qr + ';v17.6\n';
       });
     } else {
       const category = getCategoryName(receipt.category || 'uncategorized');
@@ -1191,7 +1207,11 @@ function renderLastReceipt() {
     html += '<div style="font-size:12px;color:#ff9800;margin-top:6px;">⏳ Состав появится после проверки API</div>';
   }
   if (receipt.qr) {
-    html += '<div class="lr-qr">' + receipt.qr + '</div>';
+    // === QR с кнопкой копирования и зумом ===
+    html += '<div class="lr-qr" onclick="openZoom(\'' + encodeURIComponent(receipt.qr) + '\')" title="Нажмите для увеличения">';
+    html += '<svg class="copy-icon" viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
+    html += receipt.qr;
+    html += '</div>';
   }
   div.innerHTML = html;
   box.innerHTML = '';
@@ -1296,11 +1316,15 @@ function renderReceiptsList() {
         html += '<div style="font-size:12px;color:#ff9800;margin-top:6px;">⏳ Состав появится после проверки API</div>';
       }
       if (receipt.qr) {
-        html += '<div class="qr-str">' + receipt.qr + '</div>';
+        // === QR с кнопкой копирования и зумом ===
+        html += '<div class="qr-str" onclick="event.stopPropagation();openZoom(\'' + encodeURIComponent(receipt.qr) + '\')" title="Нажмите для увеличения">';
+        html += '<svg class="copy-icon" viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
+        html += receipt.qr;
+        html += '</div>';
       }
       div.innerHTML = html;
       div.onclick = (e) => {
-        if (e.target.closest('select') || e.target.closest('button') || e.target.closest('.item-row')) return;
+        if (e.target.closest('select') || e.target.closest('button') || e.target.closest('.item-row') || e.target.closest('.qr-str')) return;
         toggleReceiptDetail(realIndex);
       };
       list.appendChild(div);
@@ -1418,7 +1442,7 @@ function updateCacheInfo() {
     diag.innerHTML = 'Отправитель: ' + (d || '(не задан)') +
       (d && d !== u ? ' (папка: ' + u + ')' : '') +
       '<br><br>Адрес отправки:<br>' + SENDER_URLS[0] +
-      '<br><br>Версия: v17.5<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
+      '<br><br>Версия: v17.6<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
   }
 }
 
@@ -1628,6 +1652,67 @@ function parseQRSum(qrData) {
 function extractQRParam(qrData, paramName) {
   const params = new URLSearchParams(qrData);
   return params.get(paramName);
+}
+
+// =====================================================================
+// ЛУПА И КОПИРОВАНИЕ QR
+// =====================================================================
+function openZoom(encodedQr) {
+  const qr = decodeURIComponent(encodedQr);
+  const zoomModal = document.getElementById('zoomModal');
+  const zoomContent = document.getElementById('zoomContent');
+  
+  // Создаем большой блок с текстом и кнопкой копирования
+  zoomContent.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+      <strong style="font-size:18px;">🔍 Увеличенный чек</strong>
+      <button onclick="copyQR('${encodeURIComponent(qr)}')" 
+              style="background:#2196F3;color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:14px;">
+        📋 Скопировать QR
+      </button>
+    </div>
+    <pre style="white-space:pre-wrap;word-break:break-all;background:#f5f5f5;padding:15px;border-radius:8px;font-family:monospace;font-size:14px;line-height:1.5;">${qr}</pre>
+  `;
+  
+  zoomModal.classList.add('active');
+}
+
+function closeZoom(event) {
+  // Закрываем только если клик был по оверлею или кнопке закрытия
+  if (!event || event.target === document.getElementById('zoomModal') || event.target.classList.contains('zoom-close')) {
+    document.getElementById('zoomModal').classList.remove('active');
+  }
+}
+
+function copyQR(encodedQr) {
+  const qr = decodeURIComponent(encodedQr);
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(qr).then(() => {
+      alert('✅ QR-код скопирован в буфер обмена!');
+      addLog('📋 QR скопирован', 'success');
+    }).catch(() => {
+      fallbackCopy(qr);
+    });
+  } else {
+    fallbackCopy(qr);
+  }
+}
+
+function fallbackCopy(text) {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  try {
+    document.execCommand('copy');
+    alert('✅ QR-код скопирован!');
+    addLog('📋 QR скопирован (fallback)', 'success');
+  } catch (err) {
+    alert('❌ Не удалось скопировать. Попробуйте выделить текст вручную.');
+  }
+  document.body.removeChild(textarea);
 }
 </script>
 </body>
