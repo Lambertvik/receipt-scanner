@@ -151,7 +151,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <div class="stats-small" id="statsSmall"></div>
 </div>
 
-<div class="footer">v17.2 | offline-first · категории для каждого товара · НДС по позициям</div>
+<div class="footer">v17.4 | offline-first · категории для каждого товара · НДС по позициям (парсинг HTML)</div>
 
 <div class="modal-overlay" id="setupModal">
   <div class="modal" style="max-width: 420px;">
@@ -534,7 +534,7 @@ window.onload = function () {
   renderLastReceipt();
   renderReceiptsList();
   updateCacheInfo();
-  addLog('✅ Сканер готов (v17.2), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
+  addLog('✅ Сканер готов (v17.4), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
   registerSW();
 
   loadExportFormat();
@@ -741,15 +741,53 @@ async function handleScan(qrData) {
 }
 
 // =====================================================================
-// PENDING → OK (+ НДС v17.2 FIX)
+// PENDING → OK (+ НДС v17.4 PARSE HTML)
 // =====================================================================
+function parseVatFromHtml(htmlStr) {
+  // Извлекаем все ставки НДС из HTML в порядке появления
+  // Примеры форматов: "НДС со ставкой 22%", "НДС 20%", "НДС 10/1.10", "НДС не облагается"
+  const results = [];
+  if (!htmlStr) return results;
+  
+  // Ищем все упоминания НДС с процентами
+  const regex = /НДС\s+(?:со\s+ставкой\s+)?(\d+)\s*%/gi;
+  let match;
+  while ((match = regex.exec(htmlStr)) !== null) {
+    const pct = parseInt(match[1]);
+    // Нормализуем: 18% -> 20%, 22% -> 20% (актуальная ставка РФ с 2019)
+    let normalizedPct = pct;
+    if (pct === 18 || pct === 22) normalizedPct = 20;
+    results.push(normalizedPct);
+  }
+  
+  // Также ищем "НДС не облагается"
+  const noVatRegex = /НДС\s+не\s+облагается/gi;
+  let noVatMatch;
+  let noVatCount = 0;
+  while ((noVatMatch = noVatRegex.exec(htmlStr)) !== null) {
+    noVatCount++;
+  }
+  
+  // Если нашли "не облагается", добавляем 0 в конец массива ставок
+  // (обычно это последние позиции или спецтовары)
+  if (noVatCount > 0) {
+    for (let i = 0; i < noVatCount; i++) {
+      results.push(0);
+    }
+  }
+  
+  return results;
+}
+
 function upgradeReceiptFromAPI(qrData, apiResponse) {
   const json = apiResponse.data.json;
+  const htmlStr = apiResponse.data.html || '';
+  
   let receipts = getReceipts();
   const idx = receipts.findIndex(r => r.qr === qrData);
   if (idx < 0) return null;
   
-  // ... (заполнение шапки чека: date, total, shop, inn, address, checkNumber, shiftNumber, cashier, cashTotalSum, ecashTotalSum, paymentMethod) ...
+  // Заполнение шапки чека
   const address = String(json.retailPlaceAddres || json.retailPlaceAddress || json.address || '');
   receipts[idx].date = json.ticketDate || receipts[idx].date;
   receipts[idx].total = json.totalSum ? (parseFloat(json.totalSum) / 100).toFixed(2) : receipts[idx].total;
@@ -769,46 +807,46 @@ function upgradeReceiptFromAPI(qrData, apiResponse) {
   receipts[idx].nds0  = json.nds0  ? parseFloat(json.nds0)  / 100 : 0; 
   receipts[idx].ndsNo = json.ndsNo ? parseFloat(json.ndsNo) / 100 : 0; 
 
-  // Маппинг числовых кодов НДС из API в понятные человеку ставки
-  function mapTaxCode(code) {
-    if (code === undefined || code === null || code === '') return 'без НДС';
-    const c = parseInt(code);
-    switch(c) {
-      case 1: return 'без НДС';
-      case 2: return '10%';
-      case 3: return '20%'; // Старый 18%, новый может приходить как 3 или 11
-      case 4: return '20%'; // Расчетная 18/1.18 -> обычно трактуем как ставку 20% сейчас
-      case 5: return '10%'; // Расчетная 10/1.10
-      case 6: return '0%';
-      case 7: return 'без НДС';
-      case 11: return '20%'; // Часто встречается у крупных сетей (Ашан, Лента)
-      default: return 'ставка ' + c; // Если неизвестный код, пишем цифру, чтобы видеть проблему
-    }
-  }
-
-  receipts[idx].items = (json.items || []).map(item => {
+  // Парсим ставки НДС из HTML для каждой позиции
+  const vatRatesFromHtml = parseVatFromHtml(htmlStr);
+  
+  receipts[idx].items = (json.items || []).map((item, itemIdx) => {
     const sumRub = item.sum ? parseFloat(item.sum) / 100 : 0;
     
-    // Получаем код налога. Может лежать в tax, ndsType, vatType
-    let rawTaxCode = item.tax ?? item.ndsType ?? item.vatType ?? ''; 
-    
-    const rateStr = mapTaxCode(rawTaxCode);
-    
-    // Считаем сумму налога исходя из распознанной ставки
+    // Берём ставку из HTML по индексу позиции
+    let detectedRate = 'без НДС';
     let calcTaxSum = 0;
-    if (rateStr === '20%') calcTaxSum = +(sumRub * 20 / 120).toFixed(2);
-    else if (rateStr === '10%') calcTaxSum = +(sumRub * 10 / 110).toFixed(2);
-    else if (rateStr === '0%' || rateStr === 'без НДС') calcTaxSum = 0;
-    else calcTaxSum = 0; // Для неизвестных ставок пока 0, чтобы не ломать баланс
+    
+    if (itemIdx < vatRatesFromHtml.length) {
+      const pct = vatRatesFromHtml[itemIdx];
+      if (pct === 20) {
+        detectedRate = '20%';
+        calcTaxSum = +(sumRub * 20 / 120).toFixed(2);
+      } else if (pct === 10) {
+        detectedRate = '10%';
+        calcTaxSum = +(sumRub * 10 / 110).toFixed(2);
+      } else if (pct === 0) {
+        detectedRate = '0%';
+        calcTaxSum = 0;
+      }
+    } else {
+      // Если позиций больше, чем найденных ставок в HTML — fallback по общему НДС чека
+      if (receipts[idx].nds18 > 0 && !receipts[idx].nds10) {
+        detectedRate = '20%';
+        calcTaxSum = +(sumRub * 20 / 120).toFixed(2);
+      } else if (receipts[idx].nds10 > 0 && !receipts[idx].nds18) {
+        detectedRate = '10%';
+        calcTaxSum = +(sumRub * 10 / 110).toFixed(2);
+      }
+    }
 
     const rawItem = {
       name: String(item.name || 'Товар'),
       quantity: item.quantity || 1,
       price: item.price ? (parseFloat(item.price) / 100).toFixed(2) : '0.00',
       sum: sumRub.toFixed(2),
-      taxRate: rateStr,
-      taxSum: calcTaxSum,
-      rawTaxCode: rawTaxCode // Сохраняем оригинальный код для отладки
+      taxRate: detectedRate,
+      taxSum: calcTaxSum
     };
     
     rawItem.category = autoDetectCategory([rawItem]);
@@ -924,7 +962,7 @@ function build1CJson(receipts) {
 function build1CText(receipts) {
   let txtContent = '#1C:UNF\n';
   txtContent += '#Version:1.1\n';  // ← bumped minor version
-  txtContent += '#ScannerVersion:17.2\n';
+  txtContent += '#ScannerVersion:17.4\n';
   txtContent += '#Encoding:UTF-8\n';
   txtContent += '#Separator:;\n';
   txtContent += '#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,TaxRate,TaxSum,QRString\n\n';
@@ -953,7 +991,7 @@ function build1CText(receipts) {
         txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' 
                     + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' 
                     + paymentMethod + ';\"' + name + '\";' + qty + ';' + price + ';' 
-                    + taxRate + ';' + taxSum + ';' + qr + ';v17.2\n';
+                    + taxRate + ';' + taxSum + ';' + qr + ';v17.4\n';
       });
     } else {
       const category = getCategoryName(receipt.category || 'uncategorized');
@@ -1387,7 +1425,7 @@ function updateCacheInfo() {
     diag.innerHTML = 'Отправитель: ' + (d || '(не задан)') +
       (d && d !== u ? ' (папка: ' + u + ')' : '') +
       '<br><br>Адрес отправки:<br>' + SENDER_URLS[0] +
-      '<br><br>Версия: v17.2<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
+      '<br><br>Версия: v17.4<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
   }
 }
 
@@ -1438,7 +1476,7 @@ function copyLog() {
   if (navigator.clipboard) {
     navigator.clipboard.writeText(text).then(() => alert('📋 Лог скопирован в буфер'));
   } else {
-    alert('Копирование недоступен в этом браузере');
+    alert('Копирование недоступно в этом браузере');
   }
 }
 
