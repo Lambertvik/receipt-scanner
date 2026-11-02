@@ -190,7 +190,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 }
 
 /* =====================================================================
-   БЛОК QR С ЛУПОЙ (ИСПРАВЛЕННЫЙ CSS)
+   БЛОК QR С ЛУПОЙ
    ===================================================================== */
 .qr-block-wrapper { 
     position: relative; 
@@ -208,7 +208,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
     cursor: crosshair; 
     position: relative; 
     z-index: 1; 
-    /* ГЛАВНОЕ ИСПРАВЛЕНИЕ ДЛЯ МОБИЛЬНОЙ ЛУПЫ */
+    /* КРИТИЧНО для мобильной лупы: не давать браузеру скроллить под пальцем */
     touch-action: none; 
 }
 
@@ -454,7 +454,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <div class="magnifier-inner" id="magnifierInner"></div>
 </div>
 
-<div class="footer">v17.8 | offline-first · категории · НДС по позициям · Мобильная лупа (исправленная)</div>
+<div class="footer">v17.9 | offline-first · категории · НДС по позициям · фикс «0 товаров» · синхронизация категорий (каркас)</div>
 
 <!-- Модальное окно первого запуска -->
 <div class="modal-overlay" id="setupModal">
@@ -500,15 +500,16 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
         <label>🔑 Токен API (proverkacheka.com)</label>
         <input id="apiTokenInput" type="text" placeholder="Вставьте ваш токен" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-size:14px;" autocapitalize="none" autocorrect="off" spellcheck="false">
         <button class="button btn-sm btn-secondary" onclick="saveApiToken()">💾 Сохранить токен</button>
-        <div class="hint">Без токена чеки не будут расшифровываться.</div>
+        <div class="hint">Без токена чеки не будут расшифровываться. Это расходный API-ключ сервиса, НЕ инфраструктурный секрет.</div>
       </div>
       <div class="settings-group">
         <label>📂 Категории и ключевые слова</label>
         <textarea id="categoriesInput" rows="10" placeholder="Формат: Название|ключ1,ключ2,ключ3&#10;Пример: Продукты|творог,сметана,молоко" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-family:monospace; font-size:12px; resize:vertical;"></textarea>
         <button class="button btn-sm btn-secondary" onclick="saveCategories()">💾 Сохранить локально</button>
-        <button class="button btn-sm" style="background:#673AB7;color:white;" onclick="loadCategoriesFromServer()">☁️ Скачать с GitHub</button>
+        <button class="button btn-sm" style="background:#673AB7;color:white;" onclick="loadCategoriesFromServer()">☁️ Скачать с сервера</button>
         <button class="button btn-sm" style="background:#4CAF50;color:white;" onclick="exportCategories()">📤 Экспорт (JSON)</button>
-        <div class="hint">Каждая строка — новая категория. Ключевые слова через запятую.</div>
+        <button class="button btn-sm" style="background:#FF7F3F;color:white;" onclick="pushCategoriesToServer()">⬆️ Отправить на сервер</button>
+        <div class="hint">Каждая строка — новая категория. Ключевые слова через запятую. Отправка на сервер работает, если задан CATEGORY_PUSH_URL (см. конфиг ниже).</div>
       </div>
       <div class="settings-group">
         <label>💾 Формат выгрузки</label>
@@ -550,8 +551,19 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 // =====================================================================
 // КОНФИГУРАЦИЯ И НАСТРОЙКИ
 // =====================================================================
+// Расходный API-ключ proverkacheka (не инфраструктурный секрет; светится в
+// браузере намеренно — без него расшифровка невозможна, решение пользователя).
 const DEFAULT_API_TOKEN = "53441.ZLqLc0Gvo8gziNZXF";
+
+// Чтение категорий: fallback-коридор. Пустой CATEGORY_PULL_URL = пропускаем NAS,
+// идём сразу в GitHub Pages. Заполнить после раздачи categories.json с NAS.
 const CATEGORIES_URL = 'https://lambertvik.github.io/receipt-scanner/categories.json';
+const CATEGORY_PULL_URL = '';   // напр. 'https://synology-flat11...:8443/categories.json'
+
+// Запись (пуш) категорий на NAS-вебхук. Пусто = не копим dirty и не пушим
+// (девать некуда). Заполнить после создания webhook /categories-update в n8n.
+// ТОКЕНЫ GH/облака сюда НЕ класть — только .env на NAS (правило 27.09).
+const CATEGORY_PUSH_URL = '';   // напр. 'https://synology-flat11...:8443/categories-update'
 
 let currentApiToken = localStorage.getItem('api_token') || DEFAULT_API_TOKEN;
 
@@ -573,10 +585,13 @@ if (currentCategories.length === 0) {
     localStorage.setItem('custom_categories', JSON.stringify(currentCategories));
 }
 
-const DAILY_API_LIMIT = 15;       // Лимит запросов к API в день
+const DAILY_API_LIMIT = 15;       // Лимит запросов к API в день (наш локальный счётчик)
 const AUTO_RETRY_MINUTES = 2;     // Интервал автоповтора
 const LOCAL_TIMEOUT_MS = 3000;    // Таймаут отправки на NAS
-const SENDER_URLS = [ 'https://synology-flat11.taila10dc4.ts.net:8443/upload' ]; // Адреса загрузки
+// Сколько раз переопрашивать чек с code=1, но пустым items, прежде чем принять
+// как «без детализации». Защищает от вечного pending-зомби при догрузке ФНС.
+const MAX_EMPTY_ITEMS_ATTEMPTS = 3;
+const SENDER_URLS = [ 'https://synology-flat11.taila10dc4.ts.net:8443/upload' ]; // Адреса загрузки чеков
 
 // Переменные состояния камеры и процесса
 let isProcessing = false;
@@ -593,7 +608,7 @@ let expandedIndex = null;
 let lastSectionExpanded = true;
 
 // =====================================================================
-// РАБОТА С ХРАНИЛИЩЕМ (LOCALSTORAGE)
+// ХРАНИЛИЩЕ (LOCALSTORAGE)
 // =====================================================================
 function getReceipts() { return JSON.parse(localStorage.getItem('receipts') || '[]'); }
 function setReceipts(a) { localStorage.setItem('receipts', JSON.stringify(a)); }
@@ -606,6 +621,13 @@ function getSenderDisplay() {
   const d = localStorage.getItem('sender_display');
   const u = getSenderUser();
   return d || u || '';
+}
+
+// Безопасное кодирование строк для inline onclick/onchange: encodeURIComponent
+// НЕ кодирует апостроф ('), а он ломает JS-литерал в кавычках.Domинируем и его.
+// decodeURIComponent обратно понимает %27, так что совместимо.
+function attrEnc(s) {
+  return encodeURIComponent(String(s == null ? '' : s)).replace(/'/g, '%27');
 }
 
 // Транслитерация для имен папок
@@ -675,27 +697,55 @@ function autoDetectCategory(items) {
 }
 
 function getCategoryName(categoryId) {
+  // Спец-обработка: 'mixed' — служебный статус «частично категоризирован»,
+  // в currentCategories его нет, иначе fallback вернул бы «Без категории»
+  // (именно это давало ощущение «выбрал категорию — чек без категории»).
+  if (categoryId === 'mixed') return 'Смешанная';
   const cat = currentCategories.find(c => c.id === categoryId);
   return cat ? cat.name : 'Без категории';
 }
 
+// Пересчёт категории ШАПКИ чека по категориям его товаров.
+// Все одной (в т.ч. все uncategorized) -> эта; иначе -> 'mixed'.
+function recalcReceiptCategory(receipt) {
+  const items = receipt.items || [];
+  if (items.length === 0) { receipt.category = 'uncategorized'; return; }
+  const uniq = new Set(items.map(i => i.category || 'uncategorized'));
+  receipt.category = (uniq.size === 1) ? [...uniq][0] : 'mixed';
+}
+
 // =====================================================================
-// РАБОТА С КАТЕГОРИЯМИ (СЕРВЕР / ЭКСПОРТ)
+// РАБОТА С КАТЕГОРИЯМИ (СЕРВЕР / ЭКСПОРТ / СИНХРОНИЗАЦИЯ)
 // =====================================================================
+// Чтение с fallback-коридором: [CATEGORY_PULL_URL (если задан), CATEGORIES_URL].
+// Первый успешный применяем и кэшируем; все упали -> оставляем localStorage.
 async function loadCategoriesFromServer() {
   if (!navigator.onLine) { addLog('📴 Офлайн: используем локальные категории', 'info'); return; }
-  try {
-    addLog('📥 Обновление категорий с GitHub...', 'info');
-    const response = await fetch(CATEGORIES_URL + '?t=' + Date.now());
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-    const newCats = await response.json();
-    if (Array.isArray(newCats) && newCats.length > 0) {
-      currentCategories = newCats;
-      localStorage.setItem('custom_categories', JSON.stringify(currentCategories));
-      addLog('✅ Категории обновлены с GitHub (' + newCats.length + ')', 'success');
-      renderAll();
+  const candidates = [];
+  if (CATEGORY_PULL_URL) candidates.push(CATEGORY_PULL_URL);
+  candidates.push(CATEGORIES_URL);
+
+  for (const url of candidates) {
+    try {
+      addLog('📥 Обновление категорий: ' + (url === CATEGORIES_URL ? 'GitHub' : 'сервер') + '...', 'info');
+      const response = await fetch(url + '?t=' + Date.now());
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const newCats = await response.json();
+      if (Array.isArray(newCats) && newCats.length > 0) {
+        currentCategories = newCats;
+        localStorage.setItem('custom_categories', JSON.stringify(currentCategories));
+        addLog('✅ Категории обновлены (' + newCats.length + ')', 'success');
+        // Свежая база получена извне -> локальных «грязных» изменений нет.
+        localStorage.removeItem('categories_dirty');
+        renderAll();
+        return; // первый успешный — выходим
+      }
+    } catch (e) {
+      addLog('⚠️ Не удалось обновить категории из ' + (url === CATEGORIES_URL ? 'GitHub' : 'сервера') + ': ' + e.message, 'info');
+      // пробуем следующий кандидат
     }
-  } catch (e) { addLog('⚠️ Не удалось обновить категории: ' + e.message, 'info'); }
+  }
+  addLog('ℹ️ Категории: используем локальную копию', 'info');
 }
 
 function exportCategories() {
@@ -707,6 +757,71 @@ function exportCategories() {
   document.body.appendChild(link); link.click(); document.body.removeChild(link);
   URL.revokeObjectURL(url);
   alert('✅ Файл categories.json скачан.');
+}
+
+// Пометить категории «грязными» для последующего пуша на NAS.
+// Если CATEGORY_PUSH_URL не задан — не копим (девать некуда), локально всё равно работает.
+function markCategoriesDirty() {
+  if (!CATEGORY_PUSH_URL) return;
+  localStorage.setItem('categories_dirty', '1');
+}
+
+// Отправить текущие категории на NAS-вебхук (идемпотентно: шлём весь снапшот,
+// webhook перезапишет файл). Успех -> снимаем флаг; офлайн/ошибка -> флаг живёт.
+async function pushCategoriesToServer() {
+  if (!CATEGORY_PUSH_URL) return;
+  if (localStorage.getItem('categories_dirty') !== '1') return;
+  if (!navigator.onLine) return;
+  try {
+    const resp = await fetch(CATEGORY_PUSH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(currentCategories)
+    });
+    if (resp.ok) {
+      localStorage.removeItem('categories_dirty');
+      addLog('⬆️ Категории отправлены на сервер', 'success');
+    } else {
+      addLog('⚠️ Пуш категорий: HTTP ' + resp.status + ' (осталось в очереди)', 'info');
+    }
+  } catch (e) {
+    addLog('⚠️ Пуш категорий недоступен: ' + (e.message || e) + ' (осталось в очереди)', 'info');
+  }
+}
+
+// Мгновенно перекрасить все uncategorized-товары по ТЕКУЩЕЙ базе категорий.
+// Вызывается после добавления ключевого слова / сохранения категорий, чтобы
+// «этот вид товара сразу применялся» локально, не дожидаясь сети/других сканеров.
+function reapplyCategoriesToAll() {
+  const receipts = getReceipts();
+  let changed = 0;
+  const cache = getCache();
+  receipts.forEach(r => {
+    if (!r.items || r.items.length === 0) return;
+    let touched = false;
+    r.items.forEach(item => {
+      if (item.category && item.category !== 'uncategorized') return; // не трогаем ручной выбор
+      const detected = autoDetectCategory([item]);
+      if (detected !== 'uncategorized' && detected !== item.category) {
+        item.category = detected;
+        touched = true;
+        changed++;
+      }
+    });
+    if (touched) {
+      recalcReceiptCategory(r);
+      if (r.status === 'ok' && cache[r.qr]) {
+        cache[r.qr].items = r.items;
+        cache[r.qr].category = r.category;
+      }
+    }
+  });
+  if (changed > 0) {
+    setReceipts(receipts);
+    setCache(cache);
+    addLog('🔁 Применено категорий к товарам: ' + changed, 'success');
+    renderAll();
+  }
 }
 
 function saveExportFormat() {
@@ -724,17 +839,28 @@ function loadExportFormat() {
 }
 
 // =====================================================================
-// ПРЕДЛОЖЕНИЕ КАТЕГОРИИ ДЛЯ НОВОГО ТОВАРА
+// ПРЕДЛОЖЕНИЕ КАТЕГОРИИ ДЛЯ НОВОГО ТОВАРА (по qrData, без гонки индекса)
 // =====================================================================
-function promptForItemCategory(receiptIndex, itemIndex, itemName) {
+// Параметры: encodedQr (attrEnc), itemIndex (число, стабилен в рамках чека),
+// encodedName (attrEnc). Внутри находим ЧЕК по qr в СВЕЖЕМ getReceipts().
+function promptForItemCategory(encodedQr, itemIndex, encodedName) {
+  const qr = decodeURIComponent(encodedQr);
+  const itemName = decodeURIComponent(encodedName);
+
+  let receipts = getReceipts();
+  const receiptIndex = receipts.findIndex(r => r.qr === qr);
+  if (receiptIndex < 0) { addLog('⚠️ Чек для категории не найден', 'error'); return; }
+  const receipt = receipts[receiptIndex];
+  if (!receipt.items || !receipt.items[itemIndex]) { addLog('⚠️ Товар не найден в чеке', 'error'); return; }
+
   let options = currentCategories.filter(c => c.id !== 'uncategorized').map(c => c.name);
   let msg = 'Товар: "' + itemName + '"\n\nВыберите категорию (введите номер):\n';
   options.forEach((name, i) => { msg += (i + 1) + '. ' + name + '\n'; });
   msg += '0. Создать новую категорию\n';
-  
+
   const choice = prompt(msg);
   if (choice === null) return;
-  
+
   let selectedCat = null;
   if (choice === '0') {
     const newName = prompt('Введите название новой категории:');
@@ -745,6 +871,7 @@ function promptForItemCategory(receiptIndex, itemIndex, itemName) {
     selectedCat = { id: newId, name: newName, keywords: keywords };
     currentCategories.push(selectedCat);
     localStorage.setItem('custom_categories', JSON.stringify(currentCategories));
+    markCategoriesDirty();
     addLog('➕ Создана категория: ' + newName, 'success');
   } else {
     const idx = parseInt(choice) - 1;
@@ -752,27 +879,35 @@ function promptForItemCategory(receiptIndex, itemIndex, itemName) {
       selectedCat = currentCategories.find(c => c.name === options[idx]);
     }
   }
-  
-  if (selectedCat) {
-    let receipts = getReceipts();
-    if (receipts[receiptIndex] && receipts[receiptIndex].items[itemIndex]) {
-      receipts[receiptIndex].items[itemIndex].category = selectedCat.id;
-      const cats = new Set(receipts[receiptIndex].items.map(i => i.category));
-      receipts[receiptIndex].category = cats.size === 1 ? [...cats][0] : 'mixed';
-      setReceipts(receipts);
-      let cache = getCache();
-      const qr = receipts[receiptIndex].qr;
-      if (cache[qr]) { cache[qr].items = receipts[receiptIndex].items; cache[qr].category = receipts[receiptIndex].category; setCache(cache); }
-      addLog('✅ "' + itemName + '" -> ' + selectedCat.name, 'success');
-      renderAll();
-      if (confirm('Добавить "' + itemName.split(' ')[0] + '" в ключевые слова категории "' + selectedCat.name + '"?')) {
-        const firstWord = itemName.toLowerCase().split(' ')[0].replace(/[^a-zа-я0-9]/g, '');
-        if (firstWord && !selectedCat.keywords.includes(firstWord)) {
-          selectedCat.keywords.push(firstWord);
-          localStorage.setItem('custom_categories', JSON.stringify(currentCategories));
-          addLog('🔑 Добавлено слово: ' + firstWord, 'success');
-        }
-      }
+
+  if (!selectedCat) return;
+
+  // Перечитаем receipts на случай, пока шло prompt (маловероятно, но безопасно)
+  receipts = getReceipts();
+  const ri = receipts.findIndex(r => r.qr === qr);
+  if (ri < 0 || !receipts[ri].items || !receipts[ri].items[itemIndex]) return;
+  receipts[ri].items[itemIndex].category = selectedCat.id;
+  recalcReceiptCategory(receipts[ri]);
+  setReceipts(receipts);
+
+  let cache = getCache();
+  if (cache[qr]) {
+    cache[qr].items = receipts[ri].items;
+    cache[qr].category = receipts[ri].category;
+    setCache(cache);
+  }
+  addLog('✅ "' + itemName + '" -> ' + selectedCat.name, 'success');
+  renderAll();
+
+  if (confirm('Добавить "' + itemName.split(' ')[0] + '" в ключевые слова категории "' + selectedCat.name + '"?')) {
+    const firstWord = itemName.toLowerCase().split(' ')[0].replace(/[^a-zа-я0-9]/g, '');
+    if (firstWord && !selectedCat.keywords.includes(firstWord)) {
+      selectedCat.keywords.push(firstWord);
+      localStorage.setItem('custom_categories', JSON.stringify(currentCategories));
+      markCategoriesDirty();
+      addLog('🔑 Добавлено слово: ' + firstWord, 'success');
+      // Мгновенно применяем новую базу ко всем некатегоризированным товарам
+      reapplyCategoriesToAll();
     }
   }
 }
@@ -784,21 +919,23 @@ window.onload = function () {
   showSetupIfNeeded();
   const setupInput = document.getElementById('setupName');
   if (setupInput) { setupInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') saveSetupName(); }); }
-  
+
   renderLastReceipt();
   renderReceiptsList();
   updateCacheInfo();
-  addLog('✅ Сканер готов (v17.8), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
+  addLog('✅ Сканер готов (v17.9), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
   registerSW();
-  
+
   loadExportFormat();
   loadCategoriesFromServer();
-  
+
   if (navigator.onLine && getSenderUser()) {
     const pending = getReceipts().filter(r => r.status === 'pending').length;
     if (pending > 0) { addLog('🌐 Найдено pending: ' + pending + ', проверю через 2 сек', 'info'); setTimeout(autoSync, 2000); }
-  } else if (!navigator.onLine) { addLog('📴 Офлайн: чеки сохранятся', 'info'); }
-  
+    // Если категории «грязные» с прошлого офлайн-сеанса — пушим при старте
+    if (localStorage.getItem('categories_dirty') === '1') setTimeout(pushCategoriesToServer, 2500);
+  } else if (!navigator.onLine) { addLog('📴 Офлайн: чеки и категории сохранятся локально', 'info'); }
+
   startAutoRetryTimer();
 };
 
@@ -806,13 +943,18 @@ window.addEventListener('online', () => {
   addLog('🌐 Сеть появилась', 'success');
   if (!getSenderUser()) return;
   loadCategoriesFromServer();
+  pushCategoriesToServer();
   const pending = getReceipts().filter(r => r.status === 'pending').length;
   if (pending > 0) setTimeout(autoSync, 1500);
 });
 
 async function autoSync() {
   if (!getSenderUser()) return;
-  try { await retryPending(false); await sendTo1C(false, true); } catch (e) { addLog('❌ Автосинк: ' + e.message, 'error'); }
+  try {
+    await retryPending(false);
+    await sendTo1C(false, true);
+    await pushCategoriesToServer();
+  } catch (e) { addLog('❌ Автосинк: ' + e.message, 'error'); }
 }
 
 function startAutoRetryTimer() {
@@ -822,7 +964,8 @@ function startAutoRetryTimer() {
     const receipts = getReceipts();
     const unsent = receipts.filter(r => r.status === 'ok' && !r.sent).length;
     const pending = receipts.filter(r => r.status === 'pending').length;
-    if (unsent > 0 || pending > 0) autoSync();
+    const catDirty = localStorage.getItem('categories_dirty') === '1';
+    if (unsent > 0 || pending > 0 || catDirty) autoSync();
   }, AUTO_RETRY_MINUTES * 60000);
 }
 
@@ -892,7 +1035,7 @@ async function handleScan(qrData) {
     shop: '', inn: '', address: '', checkNumber: '', shiftNumber: '', cashier: '',
     operationType: '1', category: 'uncategorized', cashTotalSum: 0, ecashTotalSum: 0,
     nds18: 0, nds10: 0, nds0: 0, ndsNo: 0, paymentMethod: 'unknown',
-    items: [], timestamp: Date.now(), status: 'pending'
+    emptyItemsAttempts: 0, items: [], timestamp: Date.now(), status: 'pending'
   };
   receipts.push(pendingReceipt); setReceipts(receipts); renderAll();
   if (navigator.vibrate) navigator.vibrate(100);
@@ -913,25 +1056,47 @@ async function handleScan(qrData) {
     if (data.code === 1) {
       dailyStats[today] = (dailyStats[today] || 0) + 1; localStorage.setItem('daily_stats', JSON.stringify(dailyStats));
       const upgraded = upgradeReceiptFromAPI(qrData, data);
-      if (upgraded) {
+      // upgraded === null => incomplete (позиции ещё не догружены), upgrade залогил info сам.
+      if (upgraded && upgraded.items && upgraded.items.length > 0) {
         if (navigator.vibrate) navigator.vibrate(200);
         addLog('✅ Чек расшифрован: ' + upgraded.items.length + ' тов.', 'success');
-        const uncategorizedItems = upgraded.items.map((item, idx) => ({ item, idx })).filter(x => x.item.category === 'uncategorized');
+        const uncategorizedItems = upgraded.items
+          .map((item, idx) => ({ item, idx }))
+          .filter(x => x.item.category === 'uncategorized');
         if (uncategorizedItems.length > 0) {
           const first = uncategorizedItems[0];
-          setTimeout(() => { promptForItemCategory(receipts.length - 1, first.idx, first.item.name); }, 200);
+          // Вызываем по qr (свежий поиск внутри), а не по индексу -> нет гонки.
+          setTimeout(() => {
+            promptForItemCategory(attrEnc(qrData), first.idx, attrEnc(first.item.name));
+          }, 200);
         }
+      } else if (upgraded && (!upgraded.items || upgraded.items.length === 0)) {
+        // Принят без детализации после исчерпания попыток.
+        addLog('ℹ️ Чек принят без детализации (позиций нет после ' + MAX_EMPTY_ITEMS_ATTEMPTS + ' попыток)', 'info');
       }
     } else {
-      const errMsg = data.message || data.error || JSON.stringify(data);
-      addLog('❌ Ошибка API [' + data.code + ']: ' + errMsg, 'error');
+      logApiCode(data.code, data, qrData);
     }
   } catch (error) { addLog('❌ Сеть: ' + error.message + ' — остался pending', 'error'); } finally { isProcessing = false; }
   stopCamera();
 }
 
+// Единая мягкая интерпретация кодов proverkacheka (см. spec: 1=ok, 2=не получено,
+// 3=превышен лимит, 4=ожидание перед повтором). 2/4 — НЕ ошибка, чек переопросится.
+function logApiCode(code, data, qrData) {
+  const short = String(qrData || '').substring(0, 20);
+  if (code === 2 || code === 4) {
+    addLog('⏳ ФНС догружает чек (code=' + code + ') для ' + short + '... — переопрошу автоматически', 'info');
+  } else if (code === 3) {
+    addLog('⚠️ Квота токена исчерпана (code=3) для ' + short + '... — проверится позже', 'error');
+  } else {
+    const errMsg = data.message || data.error || JSON.stringify(data);
+    addLog('❌ Ошибка API [' + code + ']: ' + errMsg, 'error');
+  }
+}
+
 // =====================================================================
-// ОБРАБОТКА ОТВЕТА API (+ НДС ИЗ HTML)
+// ОБРАБОТКА ОТВЕТА API (+ НДС ИЗ HTML, + фикс incomplete)
 // =====================================================================
 function parseVatFromHtml(htmlStr) {
   const results = [];
@@ -952,7 +1117,9 @@ function upgradeReceiptFromAPI(qrData, apiResponse) {
   let receipts = getReceipts();
   const idx = receipts.findIndex(r => r.qr === qrData);
   if (idx < 0) return null;
-  
+
+  // Шапку и НДС чека заполняем ВСЕГДА при code=1 (даже если позиций ещё нет) —
+  // так pending-чек уже показывает магазин/ИНН/дату, а не только QR-сумму.
   const address = String(json.retailPlaceAddres || json.retailPlaceAddress || json.address || '');
   receipts[idx].date = json.ticketDate || receipts[idx].date;
   receipts[idx].total = json.totalSum ? (parseFloat(json.totalSum) / 100).toFixed(2) : receipts[idx].total;
@@ -966,18 +1133,18 @@ function upgradeReceiptFromAPI(qrData, apiResponse) {
   receipts[idx].ecashTotalSum = json.ecashTotalSum ? parseFloat(json.ecashTotalSum) / 100 : 0;
   receipts[idx].paymentMethod = determinePaymentMethod(json.cashTotalSum, json.ecashTotalSum);
 
-  receipts[idx].nds18 = json.nds18 ? parseFloat(json.nds18) / 100 : 0; 
-  receipts[idx].nds10 = json.nds   ? parseFloat(json.nds)   / 100 : 0; 
-  receipts[idx].nds0  = json.nds0  ? parseFloat(json.nds0)  / 100 : 0; 
-  receipts[idx].ndsNo = json.ndsNo ? parseFloat(json.ndsNo) / 100 : 0; 
+  receipts[idx].nds18 = json.nds18 ? parseFloat(json.nds18) / 100 : 0;
+  receipts[idx].nds10 = json.nds   ? parseFloat(json.nds)   / 100 : 0;
+  receipts[idx].nds0  = json.nds0  ? parseFloat(json.nds0)  / 100 : 0;
+  receipts[idx].ndsNo = json.ndsNo ? parseFloat(json.ndsNo) / 100 : 0;
 
   const vatRatesFromHtml = parseVatFromHtml(htmlStr);
-  
+
   receipts[idx].items = (json.items || []).map((item, itemIdx) => {
     const sumRub = item.sum ? parseFloat(item.sum) / 100 : 0;
     let detectedRate = 'без НДС';
     let calcTaxSum = 0;
-    
+
     if (itemIdx < vatRatesFromHtml.length) {
       const pct = vatRatesFromHtml[itemIdx];
       if (pct === 0) { detectedRate = '0%'; calcTaxSum = 0; }
@@ -996,9 +1163,33 @@ function upgradeReceiptFromAPI(qrData, apiResponse) {
     rawItem.category = autoDetectCategory([rawItem]);
     return rawItem;
   });
-  
-  const cats = new Set(receipts[idx].items.map(i => i.category));
-  receipts[idx].category = cats.size === 1 ? [...cats][0] : 'mixed';
+
+  // === ФИКС «0 ТОВАРОВ НАВСЕГДА» ===
+  // code=1, но позиций нет -> ФНС ещё догружает. Не становимся ok, остаёмся
+  // pending, чтобы retryPending переопросил. После MAX попыток принимаем как
+  // «без детализации» (иначе вечный pending-зомби).
+  if (receipts[idx].items.length === 0) {
+    receipts[idx].emptyItemsAttempts = (receipts[idx].emptyItemsAttempts || 0) + 1;
+    if (receipts[idx].emptyItemsAttempts < MAX_EMPTY_ITEMS_ATTEMPTS) {
+      receipts[idx].status = 'pending'; // НЕ ok, НЕ кэшируем как ok
+      setReceipts(receipts);            // шапка сохранена, кэш НЕ пишем
+      renderAll();
+      addLog('⏳ Позиции ещё не догружены ФНС (попытка ' + receipts[idx].emptyItemsAttempts + '/' + MAX_EMPTY_ITEMS_ATTEMPTS + ') — переопрошу', 'info');
+      return null;
+    }
+    // Исчерпали попытки -> финально ok без детализации
+    receipts[idx].category = 'uncategorized';
+    receipts[idx].status = 'ok';
+    setReceipts(receipts);
+    let cacheOk = getCache();
+    cacheOk[qrData] = receipts[idx];
+    setCache(cacheOk);
+    renderAll();
+    return receipts[idx];
+  }
+
+  // Полноценный чек с позициями
+  recalcReceiptCategory(receipts[idx]);
   receipts[idx].status = 'ok';
   setReceipts(receipts);
   let cache = getCache();
@@ -1016,7 +1207,7 @@ async function retryPending(showAlert) {
   const today = new Date().toDateString();
   let dailyStats = JSON.parse(localStorage.getItem('daily_stats') || '{}');
   let todayCount = dailyStats[today] || 0;
-  let upgraded = 0, errors = 0, limitReached = false;
+  let upgraded = 0, errors = 0, waiting = 0, limitReached = false;
   addLog('🔄 Проверка отложенных: ' + pending.length, 'info');
   for (const p of pending) {
     if (todayCount >= DAILY_API_LIMIT) { limitReached = true; break; }
@@ -1026,15 +1217,27 @@ async function retryPending(showAlert) {
       const resp = await fetch('https://proverkacheka.com/api/v1/check/get', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData });
       const data = await resp.json();
       todayCount++; dailyStats[today] = todayCount; localStorage.setItem('daily_stats', JSON.stringify(dailyStats));
-      if (data.code === 1) { upgradeReceiptFromAPI(p.qr, data); upgraded++; }
-      else { errors++; const errMsg = data.message || data.error || JSON.stringify(data); addLog('❌ Retry Error [' + data.code + '] for ' + p.qr.substring(0,20) + '...: ' + errMsg, 'error'); }
+      if (data.code === 1) {
+        const up = upgradeReceiptFromAPI(p.qr, data);
+        if (up) upgraded++;            // null => incomplete, не считаем успехом (upgrade залогил info)
+      } else if (data.code === 2 || data.code === 4) {
+        waiting++;                     // догрузка ФНС — не ошибка, останется pending
+        logApiCode(data.code, data, p.qr);
+      } else {
+        errors++;
+        logApiCode(data.code, data, p.qr);
+      }
     } catch (err) { addLog('❌ Сеть пропала на ' + upgraded + '/' + pending.length, 'error'); break; }
   }
   const remaining = getReceipts().filter(r => r.status === 'pending').length;
-  addLog('🔄 +' + upgraded + ' расшифровано, ошибок ' + errors, 'info');
+  addLog('🔄 +' + upgraded + ' расшифровано, ждут догрузки ' + waiting + ', ошибок ' + errors, 'info');
   updateCacheInfo();
-  if (showAlert) { alert('🔄 Проверка завершена\n✅ Расшифровано: ' + upgraded + '\n❌ Ошибок: ' + errors + (limitReached ? '\n⚠️ Лимит API исчерпан, остальные — завтра' : '') + '\n\nОсталось отложенных: ' + remaining); }
-  return { upgraded, errors, remaining, limitReached };
+  if (showAlert) {
+    alert('🔄 Проверка завершена\n✅ Расшифровано: ' + upgraded + '\n⏳ Ждут догрузки ФНС: ' + waiting + '\n❌ Ошибок: ' + errors
+      + (limitReached ? '\n⚠️ Лимит API исчерпан, остальные — завтра' : '')
+      + '\n\nОсталось отложенных: ' + remaining);
+  }
+  return { upgraded, errors, waiting, remaining, limitReached };
 }
 
 // =====================================================================
@@ -1063,7 +1266,7 @@ function build1CJson(receipts) {
 }
 
 function build1CText(receipts) {
-  let txtContent = '#1C:UNF\n#Version:1.1\n#ScannerVersion:17.8\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,TaxRate,TaxSum,QRString\n\n';
+  let txtContent = '#1C:UNF\n#Version:1.1\n#ScannerVersion:17.9\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,TaxRate,TaxSum,QRString\n\n';
   receipts.forEach(function (receipt) {
     const date = String(receipt.date || '');
     const total = String(receipt.total || '0.00');
@@ -1083,7 +1286,7 @@ function build1CText(receipts) {
         const price = String(item.price || '0.00');
         const taxRate = String(item.taxRate || 'без НДС');
         const taxSum = String(item.taxSum != null ? Number(item.taxSum).toFixed(2) : '0.00');
-        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';\"' + name + '\";' + qty + ';' + price + ';' + taxRate + ';' + taxSum + ';' + qr + ';v17.8\n';
+        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';\"' + name + '\";' + qty + ';' + price + ';' + taxRate + ';' + taxSum + ';' + qr + ';v17.9\n';
       });
     } else {
       const category = getCategoryName(receipt.category || 'uncategorized');
@@ -1172,6 +1375,20 @@ function toggleLastSection() {
   renderLastReceipt();
 }
 
+// Генерация опций селекта категорий + служебная «Смешанная» (mixed).
+function categoryOptionsHtml(selectedId) {
+  let html = '';
+  currentCategories.forEach(cat => {
+    const sel = selectedId === cat.id ? 'selected' : '';
+    html += '<option value="' + cat.id + '" ' + sel + '>' + cat.name + '</option>';
+  });
+  // mixed отсутствует в currentCategories — добавляем явно, иначе селект
+  // при receipt.category==='mixed' показывал бы первую опцию («Без категории»).
+  const selMixed = selectedId === 'mixed' ? 'selected' : '';
+  html += '<option value="mixed" ' + selMixed + '>Смешанная</option>';
+  return html;
+}
+
 function renderLastReceipt() {
   const box = document.getElementById('lastReceiptBox');
   const receipts = getReceipts();
@@ -1179,6 +1396,7 @@ function renderLastReceipt() {
   if (!lastSectionExpanded) { box.innerHTML = ''; return; }
   const receipt = receipts[receipts.length - 1];
   const realIndex = receipts.length - 1;
+  const qrEnc = attrEnc(receipt.qr);
   const div = document.createElement('div');
   div.className = 'last-receipt';
   if (receipt.status === 'pending') div.classList.add('pending');
@@ -1211,17 +1429,14 @@ function renderLastReceipt() {
     vatHtml += '</div>';
     html += vatHtml;
   }
-  html += '<select class="lr-cat" onchange="updateCategory(' + realIndex + ', this.value)">';
-  currentCategories.forEach(cat => {
-    const selected = receipt.category === cat.id ? 'selected' : '';
-    html += '<option value="' + cat.id + '" ' + selected + '>' + cat.name + '</option>';
-  });
+  html += '<select class="lr-cat" onchange="updateCategory(\'' + qrEnc + '\', this.value)">';
+  html += categoryOptionsHtml(receipt.category);
   html += '</select>';
   if (receipt.items && receipt.items.length > 0) {
     html += '<div class="lr-items">';
     receipt.items.forEach((item, itemIdx) => {
       const itemCatName = getCategoryName(item.category || 'uncategorized');
-      html += '<div class="lr-item-row" style="cursor:pointer;" onclick="promptForItemCategory(' + realIndex + ', ' + itemIdx + ', \'' + item.name.replace(/'/g, "\\'") + '\')">';
+      html += '<div class="lr-item-row" style="cursor:pointer;" onclick="promptForItemCategory(\'' + qrEnc + '\', ' + itemIdx + ', \'' + attrEnc(item.name) + '\')">';
       html += '<span>' + item.name + '</span>';
       html += '<span>' + item.quantity + ' шт.</span>';
       html += '<span style="color:#4CAF50;font-weight:600;">' + item.sum + ' ₽</span>';
@@ -1231,10 +1446,12 @@ function renderLastReceipt() {
     html += '</div>';
   } else if (receipt.status === 'pending') {
     html += '<div style="font-size:12px;color:#ff9800;margin-top:6px;">⏳ Состав появится после проверки API</div>';
+  } else {
+    html += '<div style="font-size:12px;color:#888;margin-top:6px;">ℹ️ Без детализации (позиций нет)</div>';
   }
   if (receipt.qr) {
     html += '<div class="qr-block-wrapper">';
-    html += '<button class="copy-btn-inline" onclick="event.stopPropagation(); copyTextDirect(\'' + encodeURIComponent(receipt.qr) + '\')">📋 Копировать</button>';
+    html += '<button class="copy-btn-inline" onclick="event.stopPropagation(); copyTextDirect(\'' + qrEnc + '\')">📋 Копировать</button>';
     html += '<div class="lr-qr" data-qr-text="' + encodeURIComponent(receipt.qr) + '">' + receipt.qr + '</div>';
     html += '</div>';
   }
@@ -1271,6 +1488,7 @@ function renderReceiptsList() {
   list.innerHTML = '';
   orderedReversed.forEach((receipt) => {
     const realIndex = receipts.indexOf(receipt);
+    const qrEnc = attrEnc(receipt.qr);
     if (expandedIndex === realIndex) {
       const div = document.createElement('div');
       div.className = 'receipt-detail';
@@ -1297,17 +1515,14 @@ function renderReceiptsList() {
         vatHtml += '</div>';
         html += vatHtml;
       }
-      html += '<select class="cat-select" onchange="event.stopPropagation();updateCategory(' + realIndex + ', this.value)">';
-      currentCategories.forEach(cat => {
-        const selected = receipt.category === cat.id ? 'selected' : '';
-        html += '<option value="' + cat.id + '" ' + selected + '>' + cat.name + '</option>';
-      });
+      html += '<select class="cat-select" onchange="event.stopPropagation();updateCategory(\'' + qrEnc + '\', this.value)">';
+      html += categoryOptionsHtml(receipt.category);
       html += '</select>';
       if (receipt.items && receipt.items.length > 0) {
         html += '<div class="items">';
         receipt.items.forEach((item, itemIdx) => {
           const itemCatName = getCategoryName(item.category || 'uncategorized');
-          html += '<div class="item-row" style="cursor:pointer;" onclick="event.stopPropagation();promptForItemCategory(' + realIndex + ', ' + itemIdx + ', \'' + item.name.replace(/'/g, "\\'") + '\')">';
+          html += '<div class="item-row" style="cursor:pointer;" onclick="event.stopPropagation();promptForItemCategory(\'' + qrEnc + '\', ' + itemIdx + ', \'' + attrEnc(item.name) + '\')">';
           html += '<span>' + item.name + '</span>';
           html += '<span>' + item.quantity + ' шт.</span>';
           html += '<span style="font-weight:600;color:#4CAF50;">' + item.sum + ' ₽</span>';
@@ -1317,10 +1532,12 @@ function renderReceiptsList() {
         html += '</div>';
       } else if (receipt.status === 'pending') {
         html += '<div style="font-size:12px;color:#ff9800;margin-top:6px;">⏳ Состав появится после проверки API</div>';
+      } else {
+        html += '<div style="font-size:12px;color:#888;margin-top:6px;">ℹ️ Без детализации (позиций нет)</div>';
       }
       if (receipt.qr) {
         html += '<div class="qr-block-wrapper">';
-        html += '<button class="copy-btn-inline" onclick="event.stopPropagation(); copyTextDirect(\'' + encodeURIComponent(receipt.qr) + '\')">📋 Копировать</button>';
+        html += '<button class="copy-btn-inline" onclick="event.stopPropagation(); copyTextDirect(\'' + qrEnc + '\')">📋 Копировать</button>';
         html += '<div class="qr-str" data-qr-text="' + encodeURIComponent(receipt.qr) + '">' + receipt.qr + '</div>';
         html += '</div>';
       }
@@ -1370,18 +1587,30 @@ function deleteReceipt(index) {
   }
 }
 
-function updateCategory(index, categoryId) {
+// Категория ШАПКИ по qrData (без гонки индекса). Cascade на uncategorized-товары.
+function updateCategory(encodedQr, categoryId) {
+  const qr = decodeURIComponent(encodedQr);
   let receipts = getReceipts();
-  if (index >= 0 && index < receipts.length) {
-    receipts[index].category = categoryId;
-    if (categoryId !== 'mixed' && categoryId !== 'uncategorized') {
-      receipts[index].items.forEach(item => { if (item.category === 'uncategorized' || !item.category) { item.category = categoryId; } });
-    }
-    setReceipts(receipts);
-    let cache = getCache();
-    if (cache[receipts[index].qr]) { cache[receipts[index].qr].category = categoryId; cache[receipts[index].qr].items = receipts[index].items; setCache(cache); }
-    addLog('✅ Категория чека: ' + getCategoryName(categoryId), 'success');
+  const index = receipts.findIndex(r => r.qr === qr);
+  if (index < 0) { addLog('⚠️ Чек для категории не найден', 'error'); return; }
+  receipts[index].category = categoryId;
+  if (categoryId !== 'mixed' && categoryId !== 'uncategorized') {
+    receipts[index].items.forEach(item => {
+      if (item.category === 'uncategorized' || !item.category) { item.category = categoryId; }
+    });
   }
+  // После cascade пересчитываем шапку (может схлопнуться из mixed в конкретную)
+  recalcReceiptCategory(receipts[index]);
+  // Но если пользователь ЯВНО выбрал mixed/uncategorized — уважаем его выбор
+  if (categoryId === 'mixed' || categoryId === 'uncategorized') {
+    receipts[index].category = categoryId;
+  }
+  setReceipts(receipts);
+  let cache = getCache();
+  if (cache[qr]) { cache[qr].category = receipts[index].category; cache[qr].items = receipts[index].items; setCache(cache); }
+  markCategoriesDirty();
+  addLog('✅ Категория чека: ' + getCategoryName(receipts[index].category), 'success');
+  renderAll();
 }
 
 // =====================================================================
@@ -1395,7 +1624,8 @@ function updateCacheInfo() {
   const pendingCount = receipts.filter(r => r.status === 'pending').length;
   const unsentCount = receipts.filter(r => r.status === 'ok' && !r.sent).length;
   const sentCount = receipts.filter(r => r.sent).length;
-  document.getElementById('statusBar').innerHTML = '📦 Всего: <b>' + receipts.length + '</b>' + ' | ⏳ <b>' + pendingCount + '</b>' + ' | 📤 <b>' + unsentCount + '</b>' + ' | 🌐 API: <b>' + todayRequests + '/' + DAILY_API_LIMIT + '</b>';
+  const catDirty = localStorage.getItem('categories_dirty') === '1';
+  document.getElementById('statusBar').innerHTML = '📦 Всего: <b>' + receipts.length + '</b>' + ' | ⏳ <b>' + pendingCount + '</b>' + ' | 📤 <b>' + unsentCount + '</b>' + ' | 🌐 API: <b>' + todayRequests + '/' + DAILY_API_LIMIT + '</b>' + (catDirty ? ' | 📂 кат. не синхр.' : '');
   document.getElementById('statsSmall').innerHTML = (navigator.onLine ? '🌐 Онлайн' : '📴 Офлайн') + ' | ✅ Отправлено: <b>' + sentCount + '</b>' + ' | 👤 <b>' + (getSenderDisplay() || '—') + '</b>';
   const sendBtn = document.getElementById('sendBtn');
   if (unsentCount > 0) { sendBtn.textContent = '📤 Отправить в 1С (' + unsentCount + ')'; sendBtn.disabled = false; } else { sendBtn.textContent = '📤 Отправить в 1С'; }
@@ -1404,7 +1634,10 @@ function updateCacheInfo() {
   const diag = document.getElementById('diagInfo');
   if (diag) {
     const d = getSenderDisplay(); const u = getSenderUser();
-    diag.innerHTML = 'Отправитель: ' + (d || '(не задан)') + (d && d !== u ? ' (папка: ' + u + ')' : '') + '<br><br>Адрес отправки:<br>' + SENDER_URLS[0] + '<br><br>Версия: v17.8<br>Лимит API: ' + DAILY_API_LIMIT + '/день';
+    diag.innerHTML = 'Отправитель: ' + (d || '(не задан)') + (d && d !== u ? ' (папка: ' + u + ')' : '') +
+      '<br><br>Адрес отправки чеков:<br>' + SENDER_URLS[0] +
+      '<br><br>Категории: pull=' + (CATEGORY_PULL_URL || '(GitHub Pages)') + ' / push=' + (CATEGORY_PUSH_URL || '(не задан — локально)') +
+      '<br><br>Версия: v17.9<br>Лимит API: ' + DAILY_API_LIMIT + '/день<br>Повторов пустых позиций: ' + MAX_EMPTY_ITEMS_ATTEMPTS;
   }
 }
 
@@ -1483,8 +1716,11 @@ function saveCategories() {
   newCats.unshift({ id: "uncategorized", name: "Без категории", keywords: [] });
   currentCategories = newCats;
   localStorage.setItem('custom_categories', JSON.stringify(currentCategories));
+  markCategoriesDirty();
   alert('✅ Сохранено ' + (newCats.length - 1) + ' категорий');
   addLog('📂 Категории обновлены (' + (newCats.length - 1) + ')', 'success');
+  // Мгновенно применяем новую базу ко всем некатегоризированным товарам
+  reapplyCategoriesToAll();
   renderAll();
 }
 
@@ -1513,6 +1749,7 @@ function clearCodes() {
   if (confirm('⚠️ Удалить ВСЕ чеки, кэш И имя отправителя?\n\nПосле этого нужно будет заново ввести имя. Это действие нельзя отменить!')) {
     localStorage.removeItem('receipts'); localStorage.removeItem('receipts_cache'); localStorage.removeItem('daily_stats');
     localStorage.removeItem('sender_user'); localStorage.removeItem('sender_display');
+    localStorage.removeItem('categories_dirty');
     expandedIndex = null; receiptsExpanded = false;
     renderAll(); closeSettings();
     addLog('🗑️ Все чеки, кэш и имя удалены', 'success');
@@ -1580,13 +1817,13 @@ function onLensStart(e) {
   e.preventDefault(); // Предотвращаем скролл страницы
   activeTarget = e.currentTarget;
   targetRect = activeTarget.getBoundingClientRect();
-  
+
   const encodedText = activeTarget.getAttribute('data-qr-text');
   const fullText = decodeURIComponent(encodedText);
-  
+
   inner.innerText = fullText;
   inner.style.fontSize = (originalFontSize * ZOOM_FACTOR) + 'px';
-  
+
   lens.style.display = 'block';
   updateLensPosition(e.touches[0].clientX, e.touches[0].clientY);
 }
@@ -1614,9 +1851,9 @@ function updateLensPosition(clientX, clientY) {
   const relX = clientX - targetRect.left;
   const relY = clientY - targetRect.top;
 
-  const offsetX = -(relX * ZOOM_FACTOR) + 60; 
-  const offsetY = -(relY * ZOOM_FACTOR) + 60; 
-  
+  const offsetX = -(relX * ZOOM_FACTOR) + 60;
+  const offsetY = -(relY * ZOOM_FACTOR) + 60;
+
   inner.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
 }
 
