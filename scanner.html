@@ -98,6 +98,37 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 }
 
 /* =====================================================================
+   НОВОЕ v17.12: КНОПКА ПОДСВЕТКИ (TORCH) — оверлей поверх видео
+   ===================================================================== */
+.torch-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 6;
+    display: none;            /* показываем только если устройство поддерживает torch */
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 20px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    backdrop-filter: blur(2px);
+}
+.torch-btn:active { transform: scale(0.95); }
+.torch-btn.on {
+    background: #FFC107;
+    color: #000;
+    border-color: #FFD54F;
+    box-shadow: 0 0 12px rgba(255,193,7,0.75);
+}
+
+/* =====================================================================
    КНОПКИ
    ===================================================================== */
 .button { 
@@ -123,6 +154,22 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 
 .btn-secondary { background: #2196F3; color: white; }
 .btn-sm { padding: 10px; font-size: 14px; margin: 6px 0; }
+
+/* Кнопка «↻ Переопросить» в карточке pending-чека */
+.btn-retry { 
+    background: #FF9800; 
+    color: #fff; 
+    border: none; 
+    border-radius: 14px; 
+    padding: 4px 10px; 
+    font-size: 13px; 
+    font-weight: bold; 
+    cursor: pointer; 
+    margin-right: 6px; 
+    line-height: 1; 
+}
+.btn-retry:active { opacity: 0.7; transform: scale(0.95); }
+.btn-retry:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* =====================================================================
    СПИСКИ ЧЕКОВ (ОБЩИЕ)
@@ -424,6 +471,8 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <div class="video-container" id="videoContainer">
     <video id="video" playsinline></video>
     <div class="scan-overlay"><div class="scan-line"></div></div>
+    <!-- НОВОЕ v17.12: кнопка подсветки (видна только при поддержке torch устройством) -->
+    <button class="torch-btn" id="torchBtn" type="button" title="Переключить подсветку" onclick="toggleTorch()">🔦 OFF</button>
   </div>
 
   <button class="button btn-scan" id="scanBtn" onclick="toggleScan()">📷 Начать сканирование</button>
@@ -454,7 +503,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <div class="magnifier-inner" id="magnifierInner"></div>
 </div>
 
-<div class="footer">v17.10 | offline-first · категории · НДС по позициям · фикс «0 товаров» · таймаут API (VPN/сеть) · синхронизация категорий (каркас)</div>
+<div class="footer">v17.12 | offline-first · категории · НДС по позициям · фикс «0 товаров» · таймаут API · «↻» · подсветка (torch)</div>
 
 <!-- Модальное окно первого запуска -->
 <div class="modal-overlay" id="setupModal">
@@ -504,7 +553,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
       </div>
       <div class="settings-group">
         <label>📂 Категории и ключевые слова</label>
-        <textarea id="categoriesInput" rows="10" placeholder="Формат: Название|ключ1,ключ2,ключ3&#10;Пример: Продукты|творог,сметана,молоко" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-family:monospace; font-size:12px; resize:vertical;"></textarea>
+        <textarea id="categoriesInput" rows="10" placeholder="Формат: Название|ключ1,ключ2,ключ3&#10;Пример: Продукты|творог,сметан,молоко" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-family:monospace; font-size:12px; resize:vertical;"></textarea>
         <button class="button btn-sm btn-secondary" onclick="saveCategories()">💾 Сохранить локально</button>
         <button class="button btn-sm" style="background:#673AB7;color:white;" onclick="loadCategoriesFromServer()">☁️ Скачать с сервера</button>
         <button class="button btn-sm" style="background:#4CAF50;color:white;" onclick="exportCategories()">📤 Экспорт (JSON)</button>
@@ -528,6 +577,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
         <label>🔄 Синхронизация</label>
         <button class="button btn-sm btn-secondary" onclick="retryPending(true)">Проверить отложенные</button>
         <button class="button btn-sm btn-secondary" onclick="sendTo1C(true, false)">Отправить ВСЕ повторно</button>
+        <div class="hint">У каждого pending-чека есть своя кнопка «↻ Переопросить» прямо в карточке — чтобы дёрнуть один чек сразу, сменив сеть.</div>
       </div>
       <div class="settings-group">
         <label>💼 Экспорт файла (резерв)</label>
@@ -553,7 +603,11 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
 // =====================================================================
 // Расходный API-ключ proverkacheka (не инфраструктурный секрет; светится в
 // браузере намеренно — без него расшифровка невозможна, решение пользователя).
+// Примечание: альтернативные сервисы/ФНС-первоисточник в код вслепую НЕ кладём
+// (см. переписку 02.11): когда будет проверенный эндпоинт с CORS и позициями —
+// встроим fallback-коридор API_ENDPOINTS по аналогии с SENDER_URLS/категориями.
 const DEFAULT_API_TOKEN = "53441.ZLqLc0Gvo8gziNZXF";
+const API_ENDPOINT = 'https://proverkacheka.com/api/v1/check/get';
 
 // Чтение категорий: fallback-коридор. Пустой CATEGORY_PULL_URL = пропускаем NAS,
 // идём сразу в GitHub Pages. Заполнить после раздачи categories.json с NAS.
@@ -588,9 +642,8 @@ if (currentCategories.length === 0) {
 const DAILY_API_LIMIT = 15;       // Лимит запросов к API в день (наш локальный счётчик)
 const AUTO_RETRY_MINUTES = 2;     // Интервал автоповтора
 const LOCAL_TIMEOUT_MS = 3000;    // Таймаут отправки на NAS
-// НОВОЕ в v17.10: таймаут запроса к proverkacheka. Без него под VPN/нестабильной
-// мобильной сетью fetch зависает навечно -> чек залипает в pending, а isProcessing
-// блокирует камеру. 15 сек достаточно для здорового ответа ФНС-агрегатора.
+// Таймаут запроса к proverkacheka. Без него под VPN/нестабильной мобильной сети
+// fetch зависает навечно -> чек залипает в pending, а isProcessing блокирует камеру.
 const API_TIMEOUT_MS = 15000;
 // Сколько раз переопрашивать чек с code=1, но пустым items, прежде чем принять
 // как «без детализации». Защищает от вечного pending-зомби при догрузке ФНС.
@@ -610,6 +663,13 @@ let autoRetryIntervalId = null;
 let receiptsExpanded = false;
 let expandedIndex = null;
 let lastSectionExpanded = true;
+// Множество QR-кодов, которые сейчас переопрашиваются по кнопке «↻»,
+// чтобы двойное нажатие не слало два параллельных запроса на один чек.
+const retryingQrs = new Set();
+
+// НОВОЕ v17.12: состояние подсветки (torch)
+let torchSupported = false;   // умеет ли текущее устройство/браузер включать фонарик
+let torchEnabled = false;     // горит ли прямо сейчас
 
 // =====================================================================
 // ХРАНИЛИЩЕ (LOCALSTORAGE)
@@ -634,9 +694,9 @@ function attrEnc(s) {
   return encodeURIComponent(String(s == null ? '' : s)).replace(/'/g, '%27');
 }
 
-// НОВОЕ в v17.10: fetch с таймаутом через AbortController. Используется для
-// запросов к proverkacheka (API_TIMEOUT_MS) — чтобы зависшая сеть/VPN не вешали
-// сканер навсегда. При превышении времени кидается AbortError (различаем в catch).
+// fetch с таймаутом через AbortController. Используется для запросов к
+// proverkacheka (API_TIMEOUT_MS) — чтобы зависшая сеть/VPN/мобильный фильтр не
+// вешали сканер навсегда. При превышении времени кидается AbortError (различаем).
 async function fetchWithTimeout(url, options, ms) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
@@ -646,6 +706,96 @@ async function fetchWithTimeout(url, options, ms) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Единый предикат «сеть до proverkacheka не дотянула» — объединяет
+// таймаут (AbortError) и обрыв канала (TypeError / Failed to fetch). Оба исхода
+// — штатная ситуация на мобильном канале (DNS/SNI-фильтр оператора), а не ошибка
+// кода, поэтому логируются мягко (info/waiting), чек остаётся pending и
+// переопросится (авто-ретрай / online-эвент / кнопка «↻»). Красный error — только
+// на неожиданное.
+function isNetworkUnreachable(err) {
+  if (!err) return false;
+  if (err.name === 'AbortError') return true;            // таймаут 15с
+  if (err instanceof TypeError) return true;             // Failed to fetch (обрыв/DNS/TLS)
+  const m = String(err.message || '').toLowerCase();
+  return /fetch|network|load failed|unreachable|connection/i.test(m);
+}
+
+// =====================================================================
+// НОВОЕ v17.12: ПОДСВЕТКА (TORCH)
+// =====================================================================
+// Проверяем, поддерживает ли текущий видеотрек фонарик. На iOS Safari torch
+// исторически НЕ отдаётся через constraints => вернёт false, кнопку не показываем.
+function probeTorchSupport(track) {
+  try {
+    const caps = (track && track.getCapabilities) ? track.getCapabilities() : {};
+    return !!(caps && caps.torch);
+  } catch (e) {
+    return false;
+  }
+}
+
+// Применяем состояние фонарика к текущему треку. Сначала каноническая форма
+// { advanced:[{torch}] }, при отказе — прямая { torch }. Возвращает true, если
+// constraint принят браузером.
+async function applyTorch(on) {
+  if (!stream) return false;
+  const track = stream.getVideoTracks()[0];
+  if (!track) return false;
+  try {
+    await track.applyConstraints({ advanced: [{ torch: on }] });
+    return true;
+  } catch (e) {
+    try {
+      await track.applyConstraints({ torch: on });
+      return true;
+    } catch (e2) {
+      return false;
+    }
+  }
+}
+
+// Обновляем внешний вид кнопки под текущее состояние.
+function renderTorchBtn() {
+  const btn = document.getElementById('torchBtn');
+  if (!btn) return;
+  btn.classList.toggle('on', torchEnabled);
+  btn.textContent = torchEnabled ? '🔦 ON' : '🔦 OFF';
+  btn.title = torchEnabled ? 'Выключить подсветку' : 'Включить подсветку';
+}
+
+// Вызывается сразу после открытия камеры: определяем поддержку, показываем/прячем
+// кнопку и применяем ЗАПОМНЕННОЕ предпочтение (torch_pref). Дефолт — выкл, чтобы
+// не жрать батарею и не слепить, когда светло; пользователь один раз включает
+// вручную => дальше при каждом скане фонарик загорается сам (= «во время сканирования»).
+async function initTorchForStream() {
+  const track = stream && stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
+  torchSupported = track ? probeTorchSupport(track) : false;
+  const btn = document.getElementById('torchBtn');
+  if (!torchSupported) {
+    if (btn) btn.style.display = 'none';
+    torchEnabled = false;
+    return;
+  }
+  if (btn) btn.style.display = 'flex';
+  const pref = localStorage.getItem('torch_pref');
+  const wantOn = (pref === '1');
+  const ok = await applyTorch(wantOn);
+  torchEnabled = !!(ok && wantOn);
+  renderTorchBtn();
+}
+
+// Ручной переключатель по тапу на кнопку. Меняет состояние и запоминает выбор.
+async function toggleTorch() {
+  if (!torchSupported) return;
+  const next = !torchEnabled;
+  const ok = await applyTorch(next);
+  if (!ok) { addLog('❌ Не удалось переключить подсветку (устройство не приняло constraint)', 'error'); return; }
+  torchEnabled = next;
+  localStorage.setItem('torch_pref', next ? '1' : '0');
+  renderTorchBtn();
+  addLog(next ? '🔦 Подсветка включена' : '🔦 Подсветка выключена', 'info');
 }
 
 // Транслитерация для имен папок
@@ -759,8 +909,8 @@ async function loadCategoriesFromServer() {
         return; // первый успешный — выходим
       }
     } catch (e) {
-      const isTimeout = (e && e.name === 'AbortError');
-      addLog('⚠️ Не удалось обновить категории из ' + (url === CATEGORIES_URL ? 'GitHub' : 'сервера') + ': ' + (isTimeout ? 'таймаут (сеть/VPN?)' : e.message), 'info');
+      const soft = isNetworkUnreachable(e);
+      addLog('⚠️ Не удалось обновить категории из ' + (url === CATEGORIES_URL ? 'GitHub' : 'сервера') + ': ' + (soft ? 'таймаут/обрыв (сеть/VPN/моб.фильтр?)' : e.message), 'info');
       // пробуем следующий кандидат
     }
   }
@@ -804,8 +954,8 @@ async function pushCategoriesToServer() {
       addLog('⚠️ Пуш категорий: HTTP ' + resp.status + ' (осталось в очереди)', 'info');
     }
   } catch (e) {
-    const isTimeout = (e && e.name === 'AbortError');
-    addLog('⚠️ Пуш категорий недоступен: ' + (isTimeout ? 'таймаут (сеть/VPN?)' : (e.message || e)) + ' (осталось в очереди)', 'info');
+    const soft = isNetworkUnreachable(e);
+    addLog('⚠️ Пуш категорий недоступен: ' + (soft ? 'таймаут/обрыв (сеть/VPN/моб.фильтр?)' : (e.message || e)) + ' (осталось в очереди)', 'info');
   }
 }
 
@@ -943,7 +1093,7 @@ window.onload = function () {
   renderLastReceipt();
   renderReceiptsList();
   updateCacheInfo();
-  addLog('✅ Сканер готов (v17.10), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
+  addLog('✅ Сканер готов (v17.12), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
   registerSW();
 
   loadExportFormat();
@@ -1008,6 +1158,8 @@ function startScan() {
       btn.textContent = '⏹️ Остановить камеру'; btn.classList.add('scanning');
       document.getElementById('videoContainer').classList.add('active');
       addLog('📡 Камера запущена', 'info');
+      // v17.12: определяем поддержку фонарика и применяем запомненное предпочтение
+      initTorchForStream();
       requestAnimationFrame(tick);
     })
     .catch(function (err) { addLog('❌ Ошибка камеры: ' + err.message, 'error'); });
@@ -1015,8 +1167,17 @@ function startScan() {
 
 function stopScan() { stopCamera(); }
 
-function stopCamera() {
+// v17.12: stopCamera стала async — чтобы успеть ВЫКЛЮЧИТЬ фонарик ДО остановки
+// треков (иначе на части устройств torch залипает гореть после закрытия камеры).
+async function stopCamera() {
   scanning = false;
+  // Гасим подсветку, пока трек ещё жив (best-effort, не критично если не выйдет)
+  if (torchSupported && torchEnabled) {
+    try { await applyTorch(false); } catch (e) {}
+  }
+  torchEnabled = false;
+  const tbtn = document.getElementById('torchBtn');
+  if (tbtn) { tbtn.style.display = 'none'; tbtn.classList.remove('on'); tbtn.textContent = '🔦 OFF'; }
   if (stream) { stream.getTracks().forEach(track => track.stop()); stream = null; }
   const btn = document.getElementById('scanBtn');
   btn.textContent = '📷 Начать сканирование'; btn.classList.remove('scanning');
@@ -1071,9 +1232,7 @@ async function handleScan(qrData) {
   try {
     const formData = new URLSearchParams();
     formData.append('qrraw', qrData); formData.append('token', currentApiToken);
-    // v17.10: fetchWithTimeout вместо голого fetch — зависшая сеть/VPN больше
-    // не вешает сканер навсегда; по истечении API_TIMEOUT_MS кидается AbortError.
-    const response = await fetchWithTimeout('https://proverkacheka.com/api/v1/check/get', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData }, API_TIMEOUT_MS);
+    const response = await fetchWithTimeout(API_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData }, API_TIMEOUT_MS);
     const data = await response.json();
     if (data.code === 1) {
       dailyStats[today] = (dailyStats[today] || 0) + 1; localStorage.setItem('daily_stats', JSON.stringify(dailyStats));
@@ -1100,12 +1259,12 @@ async function handleScan(qrData) {
       logApiCode(data.code, data, qrData);
     }
   } catch (error) {
-    // v17.10: различаем таймаут (AbortError) и настоящую сетевую ошибку.
-    // Таймаут = сеть/VPN не дотянула до proverkacheka -> НЕ ошибка, чек остаётся
-    // pending и переопросится авто-ретраем/online-эвентом. Камера освобождается
-    // в finally ниже.
-    if (error && error.name === 'AbortError') {
-      addLog('⏱ Таймаут API (' + (API_TIMEOUT_MS/1000) + 'с) — сеть/VPN до proverkacheka не тянет, чек остался pending, переопрошу', 'info');
+    // Унификация: и таймаут (AbortError), и обрыв канала (TypeError /
+    // Failed to fetch) = «сеть до proverkacheka не дотянула» (моб.фильтр/VPN/DNS).
+    // Это НЕ ошибка кода: чек остаётся pending и переопросится (авто-ретрай /
+    // online-эвент / кнопка «↻»). Камера освобождается в finally ниже.
+    if (isNetworkUnreachable(error)) {
+      addLog('📡 Канал до proverkacheka не дотянул (таймаут/обрыв) — чек остался pending, переопрошу автоматически или по кнопке «↻»', 'info');
     } else {
       addLog('❌ Сеть: ' + error.message + ' — остался pending', 'error');
     }
@@ -1114,7 +1273,8 @@ async function handleScan(qrData) {
 }
 
 // Единая мягкая интерпретация кодов proverkacheka (см. spec: 1=ok, 2=не получено,
-// 3=превышен лимит, 4=ожидание перед повтором). 2/4 — НЕ ошибка, чек переопросится.
+// 3=превышен лимит, 4=ожидание перед повтором, 5=прочее). 2/4 — НЕ ошибка, чек
+// переопросится.
 function logApiCode(code, data, qrData) {
   const short = String(qrData || '').substring(0, 20);
   if (code === 2 || code === 4) {
@@ -1124,6 +1284,73 @@ function logApiCode(code, data, qrData) {
   } else {
     const errMsg = data.message || data.error || JSON.stringify(data);
     addLog('❌ Ошибка API [' + code + ']: ' + errMsg, 'error');
+  }
+}
+
+// =====================================================================
+// ПЕРЕОПРОС ОДНОГО ЧЕКА ПО КНОПКЕ «↻»
+// =====================================================================
+// Дёргает API один раз по конкретному QR (с тем же таймаутом), обрабатывает
+// ответ теми же функциями, что и общий ретрай, и сразу показывает результат.
+async function retryOneReceipt(encodedQr) {
+  const qr = decodeURIComponent(encodedQr);
+  if (retryingQrs.has(qr)) { addLog('↻ Этот чек уже переопрашивается', 'info'); return; }
+
+  let receipts = getReceipts();
+  const idx = receipts.findIndex(r => r.qr === qr);
+  if (idx < 0) { addLog('⚠️ Чек не найден для переопроса', 'error'); return; }
+  if (receipts[idx].status !== 'pending') {
+    addLog('ℹ️ Чек уже расшифрован/отправлен — переопрос не нужен', 'info');
+    return;
+  }
+  if (!navigator.onLine) { addLog('📴 Нет сети — переопрос невозможен', 'error'); alert('📴 Нет сети. Подключись к Wi-Fi / туннелю и нажми «↻» снова.'); return; }
+
+  const today = new Date().toDateString();
+  let dailyStats = JSON.parse(localStorage.getItem('daily_stats') || '{}');
+  if (!dailyStats[today]) dailyStats[today] = 0;
+  if (dailyStats[today] >= DAILY_API_LIMIT) {
+    addLog('⚠️ Лимит API исчерпан (' + dailyStats[today] + '/' + DAILY_API_LIMIT + ') — переопрос невозможен', 'error');
+    alert('⚠️ Дневной лимит запросов к API исчерпан (' + dailyStats[today] + '/' + DAILY_API_LIMIT + '). Попробуй завтра или снизь лимит в коде.');
+    return;
+  }
+
+  retryingQrs.add(qr);
+  addLog('↻ Переопрос одного чека...', 'info');
+  try {
+    const formData = new URLSearchParams();
+    formData.append('qrraw', qr); formData.append('token', currentApiToken);
+    const response = await fetchWithTimeout(API_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData }, API_TIMEOUT_MS);
+    const data = await response.json();
+    if (data.code === 1) {
+      dailyStats[today] = (dailyStats[today] || 0) + 1; localStorage.setItem('daily_stats', JSON.stringify(dailyStats));
+      const upgraded = upgradeReceiptFromAPI(qr, data);
+      if (upgraded && upgraded.items && upgraded.items.length > 0) {
+        if (navigator.vibrate) navigator.vibrate(200);
+        addLog('✅ Чек расшифрован: ' + upgraded.items.length + ' тов.', 'success');
+        alert('✅ Расшифрован: ' + upgraded.items.length + ' товар(ов).');
+      } else if (upgraded) {
+        addLog('ℹ️ Принят без детализации (позиций нет)', 'info');
+        alert('ℹ️ Расшифрован, но позиций в ответе нет — принят без детализации.');
+      } else {
+        // upgradeReceiptFromAPI вернул null => code=1 + пустой items, попытка ещё не
+        // исчерпана; чек остался pending. Подсказываем нажать «↻» позже.
+        addLog('⏳ Позиции ещё не догружены ФНС — попробуй «↻» ещё раз позже', 'info');
+        alert('⏳ ФНС ещё догружает позиции (попытка учтена). Нажми «↻ Переопросить» ещё раз чуть позже.');
+      }
+    } else {
+      logApiCode(data.code, data, qr);
+      alert('Ответ сервиса: code=' + data.code + (data.message ? ' — ' + data.message : '') + '\nЧек остался pending, переопросится.');
+    }
+  } catch (err) {
+    if (isNetworkUnreachable(err)) {
+      addLog('📡 Канал до proverkacheka не дотянул (таймаут/обрыв) — чек остался pending', 'info');
+      alert('❗ Сеть до proverkacheka не тянет (таймаут/обрыв канала).\nСмени сеть (Wi-Fi / туннель / приватный DNS) и нажми «↻ Переопросить» снова.');
+    } else {
+      addLog('❌ Переопрос: ' + (err.message || err), 'error');
+      alert('❌ Ошибка переопроса: ' + (err.message || err));
+    }
+  } finally {
+    retryingQrs.delete(qr);
   }
 }
 
@@ -1198,8 +1425,8 @@ function upgradeReceiptFromAPI(qrData, apiResponse) {
 
   // === ФИКС «0 ТОВАРОВ НАВСЕГДА» ===
   // code=1, но позиций нет -> ФНС ещё догружает. Не становимся ok, остаёмся
-  // pending, чтобы retryPending переопросил. После MAX попыток принимаем как
-  // «без детализации» (иначе вечный pending-зомби).
+  // pending, чтобы retryPending/кнопка «↻» переопросили. После MAX попыток
+  // принимаем как «без детализации» (иначе вечный pending-зомби).
   if (receipts[idx].items.length === 0) {
     receipts[idx].emptyItemsAttempts = (receipts[idx].emptyItemsAttempts || 0) + 1;
     if (receipts[idx].emptyItemsAttempts < MAX_EMPTY_ITEMS_ATTEMPTS) {
@@ -1246,11 +1473,7 @@ async function retryPending(showAlert) {
     try {
       const formData = new URLSearchParams();
       formData.append('qrraw', p.qr); formData.append('token', currentApiToken);
-      // v17.10: таймаут и здесь. При AbortError (сеть/VPN) — НЕ ошибка, а waiting;
-      // прерываем цикл (сеть не отвечает), остальные чеки переопросит следующий
-      // авто-ретрай / online-эвент. daily_stats при этом НЕ инкрементим (запрос
-      // не дошёл до code=1).
-      const resp = await fetchWithTimeout('https://proverkacheka.com/api/v1/check/get', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData }, API_TIMEOUT_MS);
+      const resp = await fetchWithTimeout(API_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData }, API_TIMEOUT_MS);
       const data = await resp.json();
       todayCount++; dailyStats[today] = todayCount; localStorage.setItem('daily_stats', JSON.stringify(dailyStats));
       if (data.code === 1) {
@@ -1264,12 +1487,17 @@ async function retryPending(showAlert) {
         logApiCode(data.code, data, p.qr);
       }
     } catch (err) {
-      if (err && err.name === 'AbortError') {
+      // Унификация: таймаут (AbortError) и обрыв канала (TypeError /
+      // Failed to fetch) = «сеть до proverkacheka не дотянула» (моб.фильтр/VPN/DNS).
+      // Мягкий waiting + break (сеть не отвечает, остальные переопросит след. цикл /
+      // online-эвент / кнопка «↻»), БЕЗ красного error. daily_stats при этом НЕ
+      // инкрементим (запрос не дошёл до code=1).
+      if (isNetworkUnreachable(err)) {
         waiting++;
-        addLog('⏱ Таймаут API (' + (API_TIMEOUT_MS/1000) + 'с) для ' + String(p.qr).substring(0,20) + '... — сеть/VPN не тянет до proverkacheka, переопрошу позже', 'info');
-        break; // сеть не отвечает — нет смысла долбить остальные в этом цикле
+        addLog('📡 Канал до proverkacheka не дотянул (таймаут/обрыв) для ' + String(p.qr).substring(0,20) + '... — переопрошу позже (или кнопкой «↻»)', 'info');
+        break;
       }
-      addLog('❌ Сеть пропала на ' + upgraded + '/' + pending.length, 'error');
+      addLog('❌ Неожиданная ошибка на ' + upgraded + '/' + pending.length + ': ' + (err.message || err), 'error');
       break;
     }
   }
@@ -1279,7 +1507,8 @@ async function retryPending(showAlert) {
   if (showAlert) {
     alert('🔄 Проверка завершена\n✅ Расшифровано: ' + upgraded + '\n⏳ Ждут догрузки/сети: ' + waiting + '\n❌ Ошибок: ' + errors
       + (limitReached ? '\n⚠️ Лимит API исчерпан, остальные — завтра' : '')
-      + '\n\nОсталось отложенных: ' + remaining);
+      + '\n\nОсталось отложенных: ' + remaining
+      + '\n\nПодсказка: у каждого pending-чека есть кнопка «↻ Переопросить» — сменив сеть, дёрни нужный чек сразу.');
   }
   return { upgraded, errors, waiting, remaining, limitReached };
 }
@@ -1310,7 +1539,7 @@ function build1CJson(receipts) {
 }
 
 function build1CText(receipts) {
-  let txtContent = '#1C:UNF\n#Version:1.1\n#ScannerVersion:17.10\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,TaxRate,TaxSum,QRString\n\n';
+  let txtContent = '#1C:UNF\n#Version:1.1\n#ScannerVersion:17.12\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,TaxRate,TaxSum,QRString\n\n';
   receipts.forEach(function (receipt) {
     const date = String(receipt.date || '');
     const total = String(receipt.total || '0.00');
@@ -1330,7 +1559,7 @@ function build1CText(receipts) {
         const price = String(item.price || '0.00');
         const taxRate = String(item.taxRate || 'без НДС');
         const taxSum = String(item.taxSum != null ? Number(item.taxSum).toFixed(2) : '0.00');
-        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';\"' + name + '\";' + qty + ';' + price + ';' + taxRate + ';' + taxSum + ';' + qr + ';v17.10\n';
+        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';\"' + name + '\";' + qty + ';' + price + ';' + taxRate + ';' + taxSum + ';' + qr + ';v17.12\n';
       });
     } else {
       const category = getCategoryName(receipt.category || 'uncategorized');
@@ -1433,6 +1662,12 @@ function categoryOptionsHtml(selectedId) {
   return html;
 }
 
+// Кнопка «↻ Переопросить» для pending-чека (в шапке карточки).
+function retryButtonHtml(qrEnc, status) {
+  if (status !== 'pending') return '';
+  return '<button class="btn-retry" title="Переопросить этот чек по API" onclick="event.stopPropagation(); retryOneReceipt(\'' + qrEnc + '\')">↻</button>';
+}
+
 function renderLastReceipt() {
   const box = document.getElementById('lastReceiptBox');
   const receipts = getReceipts();
@@ -1446,8 +1681,7 @@ function renderLastReceipt() {
   if (receipt.status === 'pending') div.classList.add('pending');
   if (receipt.sent) div.classList.add('sent');
 
-  let html = '<div class="lr-header"><span>' + (receipt.date || '') + '</span>';
-  html += '<button style="background:#f44336;color:white;border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;" onclick="deleteReceipt(' + realIndex + ')">✕</button></div>';
+  let html = '<div class="lr-header"><span>' + (receipt.date || '') + '</span><span>' + retryButtonHtml(qrEnc, receipt.status) + '<button style="background:#f44336;color:white;border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;" onclick="deleteReceipt(' + realIndex + ')">✕</button></span></div>';
   let badges = '';
   if (receipt.sent) badges += '<span class="lr-badge" style="color:#4CAF50;">✅ отправлен</span>';
   if (receipt.status === 'pending') badges += '<span class="lr-badge" style="color:#ff9800;">⏳ ждёт проверки</span>';
@@ -1489,7 +1723,7 @@ function renderLastReceipt() {
     });
     html += '</div>';
   } else if (receipt.status === 'pending') {
-    html += '<div style="font-size:12px;color:#ff9800;margin-top:6px;">⏳ Состав появится после проверки API</div>';
+    html += '<div style="font-size:12px;color:#ff9800;margin-top:6px;">⏳ Состав появится после проверки API (или нажми «↻» сменив сеть)</div>';
   } else {
     html += '<div style="font-size:12px;color:#888;margin-top:6px;">ℹ️ Без детализации (позиций нет)</div>';
   }
@@ -1538,8 +1772,7 @@ function renderReceiptsList() {
       div.className = 'receipt-detail';
       if (receipt.status === 'pending') div.classList.add('pending');
       if (receipt.sent) div.classList.add('sent');
-      let html = '<div class="detail-header"><span>' + (receipt.date || '') + '</span>';
-      html += '<button class="btn-delete" onclick="event.stopPropagation();deleteReceipt(' + realIndex + ')">✕</button></div>';
+      let html = '<div class="detail-header"><span>' + (receipt.date || '') + '</span><span>' + retryButtonHtml(qrEnc, receipt.status) + '<button class="btn-delete" onclick="event.stopPropagation();deleteReceipt(' + realIndex + ')">✕</button></span></div>';
       let badges = '';
       if (receipt.sent) badges += ' <span style="color:#4CAF50;font-size:12px;">✅</span>';
       if (receipt.status === 'pending') badges += ' <span style="color:#ff9800;font-size:12px;">⏳</span>';
@@ -1575,7 +1808,7 @@ function renderReceiptsList() {
         });
         html += '</div>';
       } else if (receipt.status === 'pending') {
-        html += '<div style="font-size:12px;color:#ff9800;margin-top:6px;">⏳ Состав появится после проверки API</div>';
+        html += '<div style="font-size:12px;color:#ff9800;margin-top:6px;">⏳ Состав появится после проверки API (или нажми «↻» сменив сеть)</div>';
       } else {
         html += '<div style="font-size:12px;color:#888;margin-top:6px;">ℹ️ Без детализации (позиций нет)</div>';
       }
@@ -1678,11 +1911,13 @@ function updateCacheInfo() {
   const diag = document.getElementById('diagInfo');
   if (diag) {
     const d = getSenderDisplay(); const u = getSenderUser();
+    const torchPref = localStorage.getItem('torch_pref');
     diag.innerHTML = 'Отправитель: ' + (d || '(не задан)') + (d && d !== u ? ' (папка: ' + u + ')' : '') +
       '<br><br>Адрес отправки чеков:<br>' + SENDER_URLS[0] +
+      '<br><br>API расшифровки: ' + API_ENDPOINT + ' (таймаут ' + (API_TIMEOUT_MS/1000) + 'с; при таймауте/обрыве чек остаётся pending и переопрашивается авто-ретраем, online-эвентом или кнопкой «↻»)' +
+      '<br><br>Подсветка (torch): предпочтение = ' + (torchPref === '1' ? 'вкл (загорается при скане)' : (torchPref === '0' ? 'выкл' : 'не задано (вкл первый раз кнопкой 🔦)')) + '; поддержка зависит от устройства/браузера (на iOS Safari обычно недоступна => кнопки не будет)' +
       '<br><br>Категории: pull=' + (CATEGORY_PULL_URL || '(GitHub Pages)') + ' / push=' + (CATEGORY_PUSH_URL || '(не задан — локально)') +
-      '<br><br>Таймаут API (proverkacheka): ' + (API_TIMEOUT_MS/1000) + 'с (при зависании сети/VPN чек остаётся pending и переопрашивается)' +
-      '<br><br>Версия: v17.10<br>Лимит API: ' + DAILY_API_LIMIT + '/день<br>Повторов пустых позиций: ' + MAX_EMPTY_ITEMS_ATTEMPTS;
+      '<br><br>Версия: v17.12<br>Лимит API: ' + DAILY_API_LIMIT + '/день<br>Повторов пустых позиций: ' + MAX_EMPTY_ITEMS_ATTEMPTS;
   }
 }
 
