@@ -454,7 +454,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
   <div class="magnifier-inner" id="magnifierInner"></div>
 </div>
 
-<div class="footer">v17.9 | offline-first · категории · НДС по позициям · фикс «0 товаров» · синхронизация категорий (каркас)</div>
+<div class="footer">v17.10 | offline-first · категории · НДС по позициям · фикс «0 товаров» · таймаут API (VPN/сеть) · синхронизация категорий (каркас)</div>
 
 <!-- Модальное окно первого запуска -->
 <div class="modal-overlay" id="setupModal">
@@ -509,7 +509,7 @@ h1 { color: #333; text-align: center; margin-bottom: 12px; font-size: 22px; }
         <button class="button btn-sm" style="background:#673AB7;color:white;" onclick="loadCategoriesFromServer()">☁️ Скачать с сервера</button>
         <button class="button btn-sm" style="background:#4CAF50;color:white;" onclick="exportCategories()">📤 Экспорт (JSON)</button>
         <button class="button btn-sm" style="background:#FF7F3F;color:white;" onclick="pushCategoriesToServer()">⬆️ Отправить на сервер</button>
-        <div class="hint">Каждая строка — новая категория. Ключевые слова через запятую. Отправка на сервер работает, если задан CATEGORY_PUSH_URL (см. конфиг ниже).</div>
+        <div class="hint">Каждая строка — новая категория. Ключевые слова через запятую. Отправка на сервер работает, если задан CATEGORY_PUSH_URL (см. диагностику).</div>
       </div>
       <div class="settings-group">
         <label>💾 Формат выгрузки</label>
@@ -588,6 +588,10 @@ if (currentCategories.length === 0) {
 const DAILY_API_LIMIT = 15;       // Лимит запросов к API в день (наш локальный счётчик)
 const AUTO_RETRY_MINUTES = 2;     // Интервал автоповтора
 const LOCAL_TIMEOUT_MS = 3000;    // Таймаут отправки на NAS
+// НОВОЕ в v17.10: таймаут запроса к proverkacheka. Без него под VPN/нестабильной
+// мобильной сетью fetch зависает навечно -> чек залипает в pending, а isProcessing
+// блокирует камеру. 15 сек достаточно для здорового ответа ФНС-агрегатора.
+const API_TIMEOUT_MS = 15000;
 // Сколько раз переопрашивать чек с code=1, но пустым items, прежде чем принять
 // как «без детализации». Защищает от вечного pending-зомби при догрузке ФНС.
 const MAX_EMPTY_ITEMS_ATTEMPTS = 3;
@@ -624,10 +628,24 @@ function getSenderDisplay() {
 }
 
 // Безопасное кодирование строк для inline onclick/onchange: encodeURIComponent
-// НЕ кодирует апостроф ('), а он ломает JS-литерал в кавычках.Domинируем и его.
+// НЕ кодирует апостроф ('), а он ломает JS-литерал в кавычках. Доминируем и его.
 // decodeURIComponent обратно понимает %27, так что совместимо.
 function attrEnc(s) {
   return encodeURIComponent(String(s == null ? '' : s)).replace(/'/g, '%27');
+}
+
+// НОВОЕ в v17.10: fetch с таймаутом через AbortController. Используется для
+// запросов к proverkacheka (API_TIMEOUT_MS) — чтобы зависшая сеть/VPN не вешали
+// сканер навсегда. При превышении времени кидается AbortError (различаем в catch).
+async function fetchWithTimeout(url, options, ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    const resp = await fetch(url, Object.assign({}, options, { signal: controller.signal }));
+    return resp;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Транслитерация для имен папок
@@ -728,7 +746,7 @@ async function loadCategoriesFromServer() {
   for (const url of candidates) {
     try {
       addLog('📥 Обновление категорий: ' + (url === CATEGORIES_URL ? 'GitHub' : 'сервер') + '...', 'info');
-      const response = await fetch(url + '?t=' + Date.now());
+      const response = await fetchWithTimeout(url + '?t=' + Date.now(), {}, API_TIMEOUT_MS);
       if (!response.ok) throw new Error('HTTP ' + response.status);
       const newCats = await response.json();
       if (Array.isArray(newCats) && newCats.length > 0) {
@@ -741,7 +759,8 @@ async function loadCategoriesFromServer() {
         return; // первый успешный — выходим
       }
     } catch (e) {
-      addLog('⚠️ Не удалось обновить категории из ' + (url === CATEGORIES_URL ? 'GitHub' : 'сервера') + ': ' + e.message, 'info');
+      const isTimeout = (e && e.name === 'AbortError');
+      addLog('⚠️ Не удалось обновить категории из ' + (url === CATEGORIES_URL ? 'GitHub' : 'сервера') + ': ' + (isTimeout ? 'таймаут (сеть/VPN?)' : e.message), 'info');
       // пробуем следующий кандидат
     }
   }
@@ -773,11 +792,11 @@ async function pushCategoriesToServer() {
   if (localStorage.getItem('categories_dirty') !== '1') return;
   if (!navigator.onLine) return;
   try {
-    const resp = await fetch(CATEGORY_PUSH_URL, {
+    const resp = await fetchWithTimeout(CATEGORY_PUSH_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(currentCategories)
-    });
+    }, API_TIMEOUT_MS);
     if (resp.ok) {
       localStorage.removeItem('categories_dirty');
       addLog('⬆️ Категории отправлены на сервер', 'success');
@@ -785,7 +804,8 @@ async function pushCategoriesToServer() {
       addLog('⚠️ Пуш категорий: HTTP ' + resp.status + ' (осталось в очереди)', 'info');
     }
   } catch (e) {
-    addLog('⚠️ Пуш категорий недоступен: ' + (e.message || e) + ' (осталось в очереди)', 'info');
+    const isTimeout = (e && e.name === 'AbortError');
+    addLog('⚠️ Пуш категорий недоступен: ' + (isTimeout ? 'таймаут (сеть/VPN?)' : (e.message || e)) + ' (осталось в очереди)', 'info');
   }
 }
 
@@ -923,7 +943,7 @@ window.onload = function () {
   renderLastReceipt();
   renderReceiptsList();
   updateCacheInfo();
-  addLog('✅ Сканер готов (v17.9), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
+  addLog('✅ Сканер готов (v17.10), отправитель: ' + (getSenderDisplay() || '(не задан)'), 'success');
   registerSW();
 
   loadExportFormat();
@@ -1051,7 +1071,9 @@ async function handleScan(qrData) {
   try {
     const formData = new URLSearchParams();
     formData.append('qrraw', qrData); formData.append('token', currentApiToken);
-    const response = await fetch('https://proverkacheka.com/api/v1/check/get', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData });
+    // v17.10: fetchWithTimeout вместо голого fetch — зависшая сеть/VPN больше
+    // не вешает сканер навсегда; по истечении API_TIMEOUT_MS кидается AbortError.
+    const response = await fetchWithTimeout('https://proverkacheka.com/api/v1/check/get', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData }, API_TIMEOUT_MS);
     const data = await response.json();
     if (data.code === 1) {
       dailyStats[today] = (dailyStats[today] || 0) + 1; localStorage.setItem('daily_stats', JSON.stringify(dailyStats));
@@ -1077,7 +1099,17 @@ async function handleScan(qrData) {
     } else {
       logApiCode(data.code, data, qrData);
     }
-  } catch (error) { addLog('❌ Сеть: ' + error.message + ' — остался pending', 'error'); } finally { isProcessing = false; }
+  } catch (error) {
+    // v17.10: различаем таймаут (AbortError) и настоящую сетевую ошибку.
+    // Таймаут = сеть/VPN не дотянула до proverkacheka -> НЕ ошибка, чек остаётся
+    // pending и переопросится авто-ретраем/online-эвентом. Камера освобождается
+    // в finally ниже.
+    if (error && error.name === 'AbortError') {
+      addLog('⏱ Таймаут API (' + (API_TIMEOUT_MS/1000) + 'с) — сеть/VPN до proverkacheka не тянет, чек остался pending, переопрошу', 'info');
+    } else {
+      addLog('❌ Сеть: ' + error.message + ' — остался pending', 'error');
+    }
+  } finally { isProcessing = false; }
   stopCamera();
 }
 
@@ -1202,8 +1234,8 @@ function upgradeReceiptFromAPI(qrData, apiResponse) {
 async function retryPending(showAlert) {
   let receipts = getReceipts();
   const pending = receipts.filter(r => r.status === 'pending');
-  if (pending.length === 0) { if (showAlert) alert('✅ Отложенных чеков нет'); return { upgraded: 0, errors: 0, remaining: 0 }; }
-  if (!navigator.onLine) { if (showAlert) alert('📴 Нет сети. Подключись к Wi-Fi и повтори.'); return { upgraded: 0, errors: 0, remaining: pending.length }; }
+  if (pending.length === 0) { if (showAlert) alert('✅ Отложенных чеков нет'); return { upgraded: 0, errors: 0, waiting: 0, remaining: 0 }; }
+  if (!navigator.onLine) { if (showAlert) alert('📴 Нет сети. Подключись к Wi-Fi и повтори.'); return { upgraded: 0, errors: 0, waiting: 0, remaining: pending.length }; }
   const today = new Date().toDateString();
   let dailyStats = JSON.parse(localStorage.getItem('daily_stats') || '{}');
   let todayCount = dailyStats[today] || 0;
@@ -1214,7 +1246,11 @@ async function retryPending(showAlert) {
     try {
       const formData = new URLSearchParams();
       formData.append('qrraw', p.qr); formData.append('token', currentApiToken);
-      const resp = await fetch('https://proverkacheka.com/api/v1/check/get', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData });
+      // v17.10: таймаут и здесь. При AbortError (сеть/VPN) — НЕ ошибка, а waiting;
+      // прерываем цикл (сеть не отвечает), остальные чеки переопросит следующий
+      // авто-ретрай / online-эвент. daily_stats при этом НЕ инкрементим (запрос
+      // не дошёл до code=1).
+      const resp = await fetchWithTimeout('https://proverkacheka.com/api/v1/check/get', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData }, API_TIMEOUT_MS);
       const data = await resp.json();
       todayCount++; dailyStats[today] = todayCount; localStorage.setItem('daily_stats', JSON.stringify(dailyStats));
       if (data.code === 1) {
@@ -1227,13 +1263,21 @@ async function retryPending(showAlert) {
         errors++;
         logApiCode(data.code, data, p.qr);
       }
-    } catch (err) { addLog('❌ Сеть пропала на ' + upgraded + '/' + pending.length, 'error'); break; }
+    } catch (err) {
+      if (err && err.name === 'AbortError') {
+        waiting++;
+        addLog('⏱ Таймаут API (' + (API_TIMEOUT_MS/1000) + 'с) для ' + String(p.qr).substring(0,20) + '... — сеть/VPN не тянет до proverkacheka, переопрошу позже', 'info');
+        break; // сеть не отвечает — нет смысла долбить остальные в этом цикле
+      }
+      addLog('❌ Сеть пропала на ' + upgraded + '/' + pending.length, 'error');
+      break;
+    }
   }
   const remaining = getReceipts().filter(r => r.status === 'pending').length;
-  addLog('🔄 +' + upgraded + ' расшифровано, ждут догрузки ' + waiting + ', ошибок ' + errors, 'info');
+  addLog('🔄 +' + upgraded + ' расшифровано, ждут догрузки/сети ' + waiting + ', ошибок ' + errors, 'info');
   updateCacheInfo();
   if (showAlert) {
-    alert('🔄 Проверка завершена\n✅ Расшифровано: ' + upgraded + '\n⏳ Ждут догрузки ФНС: ' + waiting + '\n❌ Ошибок: ' + errors
+    alert('🔄 Проверка завершена\n✅ Расшифровано: ' + upgraded + '\n⏳ Ждут догрузки/сети: ' + waiting + '\n❌ Ошибок: ' + errors
       + (limitReached ? '\n⚠️ Лимит API исчерпан, остальные — завтра' : '')
       + '\n\nОсталось отложенных: ' + remaining);
   }
@@ -1266,7 +1310,7 @@ function build1CJson(receipts) {
 }
 
 function build1CText(receipts) {
-  let txtContent = '#1C:UNF\n#Version:1.1\n#ScannerVersion:17.9\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,TaxRate,TaxSum,QRString\n\n';
+  let txtContent = '#1C:UNF\n#Version:1.1\n#ScannerVersion:17.10\n#Encoding:UTF-8\n#Separator:;\n#Fields:Date,Amount,Shop,INN,Address,CheckNum,ShiftNum,Cashier,Category,PaymentMethod,Item,Quantity,Price,TaxRate,TaxSum,QRString\n\n';
   receipts.forEach(function (receipt) {
     const date = String(receipt.date || '');
     const total = String(receipt.total || '0.00');
@@ -1286,7 +1330,7 @@ function build1CText(receipts) {
         const price = String(item.price || '0.00');
         const taxRate = String(item.taxRate || 'без НДС');
         const taxSum = String(item.taxSum != null ? Number(item.taxSum).toFixed(2) : '0.00');
-        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';\"' + name + '\";' + qty + ';' + price + ';' + taxRate + ';' + taxSum + ';' + qr + ';v17.9\n';
+        txtContent += date + ';' + total + ';' + shop + ';' + inn + ';' + address + ';' + checkNum + ';' + shiftNum + ';' + cashier + ';' + category + ';' + paymentMethod + ';\"' + name + '\";' + qty + ';' + price + ';' + taxRate + ';' + taxSum + ';' + qr + ';v17.10\n';
       });
     } else {
       const category = getCategoryName(receipt.category || 'uncategorized');
@@ -1637,7 +1681,8 @@ function updateCacheInfo() {
     diag.innerHTML = 'Отправитель: ' + (d || '(не задан)') + (d && d !== u ? ' (папка: ' + u + ')' : '') +
       '<br><br>Адрес отправки чеков:<br>' + SENDER_URLS[0] +
       '<br><br>Категории: pull=' + (CATEGORY_PULL_URL || '(GitHub Pages)') + ' / push=' + (CATEGORY_PUSH_URL || '(не задан — локально)') +
-      '<br><br>Версия: v17.9<br>Лимит API: ' + DAILY_API_LIMIT + '/день<br>Повторов пустых позиций: ' + MAX_EMPTY_ITEMS_ATTEMPTS;
+      '<br><br>Таймаут API (proverkacheka): ' + (API_TIMEOUT_MS/1000) + 'с (при зависании сети/VPN чек остаётся pending и переопрашивается)' +
+      '<br><br>Версия: v17.10<br>Лимит API: ' + DAILY_API_LIMIT + '/день<br>Повторов пустых позиций: ' + MAX_EMPTY_ITEMS_ATTEMPTS;
   }
 }
 
