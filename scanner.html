@@ -889,6 +889,15 @@ function recalcReceiptCategory(receipt) {
 // Первый успешный применяем и кэшируем; все упали -> оставляем localStorage.
 async function loadCategoriesFromServer() {
   if (!navigator.onLine) { addLog('📴 Офлайн: используем локальные категории', 'info'); return; }
+  // ЗАЩИТА ЛОКАЛЬНЫХ ПРАВОК (v17.13): если справочник правили локально и ещё не
+  // отправили наружу (categories_dirty=1), НЕ затираем серверной копией — иначе
+  // добавленные вручную категории/ключевые слова пропадут при следующем открытии.
+  // Флаг снимается успешным pushCategoriesToServer() (когда будет задан
+  // CATEGORY_PUSH_URL и создан webhook) либо полной очисткой в настройках.
+  if (localStorage.getItem('categories_dirty') === '1') {
+    addLog('📂 Пропущен pull категорий: есть несохранённые локальные правки справочника (не затираем). Синхронизация включится после push на сервер.', 'info');
+    return;
+  }
   const candidates = [];
   if (CATEGORY_PULL_URL) candidates.push(CATEGORY_PULL_URL);
   candidates.push(CATEGORIES_URL);
@@ -928,10 +937,11 @@ function exportCategories() {
   alert('✅ Файл categories.json скачан.');
 }
 
-// Пометить категории «грязными» для последующего пуша на NAS.
-// Если CATEGORY_PUSH_URL не задан — не копим (девать некуда), локально всё равно работает.
+// Пометить справочник категорий «изменённым локально» (v17.13). Ставим флаг ВСЕГДА,
+// независимо от CATEGORY_PUSH_URL: он нужен не только как очередь пуша, но и чтобы
+// loadCategoriesFromServer() НЕ затирал локальные правки серверной копией, пока канал
+// записи не включён. Снимается успешным pushCategoriesToServer() либо полной очисткой.
 function markCategoriesDirty() {
-  if (!CATEGORY_PUSH_URL) return;
   localStorage.setItem('categories_dirty', '1');
 }
 
@@ -1883,11 +1893,9 @@ function updateCategory(encodedQr, categoryId) {
     receipts[index].category = categoryId;
   }
   setReceipts(receipts);
-  let cache = getCache();
+   let cache = getCache();
   if (cache[qr]) { cache[qr].category = receipts[index].category; cache[qr].items = receipts[index].items; setCache(cache); }
-  markCategoriesDirty();
   addLog('✅ Категория чека: ' + getCategoryName(receipts[index].category), 'success');
-  renderAll();
 }
 
 // =====================================================================
