@@ -641,7 +641,7 @@ if (currentCategories.length === 0) {
 
 const DAILY_API_LIMIT = 15;       // Лимит запросов к API в день (наш локальный счётчик)
 const AUTO_RETRY_MINUTES = 2;     // Интервал автоповтора
-const LOCAL_TIMEOUT_MS = 3000;    // Таймаут отправки на NAS
+const LOCAL_TIMEOUT_MS = 12000;    // Таймаут отправки на NAS
 // Таймаут запроса к proverkacheka. Без него под VPN/нестабильной мобильной сети
 // fetch зависает навечно -> чек залипает в pending, а isProcessing блокирует камеру.
 const API_TIMEOUT_MS = 15000;
