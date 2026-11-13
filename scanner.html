@@ -1915,7 +1915,8 @@ function updateCacheInfo() {
   const sendBtn = document.getElementById('sendBtn');
   if (unsentCount > 0) { sendBtn.textContent = '📤 Отправить в 1С (' + unsentCount + ')'; sendBtn.disabled = false; } else { sendBtn.textContent = '📤 Отправить в 1С'; }
   const banner = document.getElementById('alertBanner');
-  if (unsentCount > 0 && navigator.onLine) { banner.style.display = 'block'; banner.textContent = '⚠️ Не отправлено: ' + unsentCount + '. NAS недоступен? Проверю через ' + AUTO_RETRY_MINUTES + ' мин.'; } else { banner.style.display = 'none'; }
+  //if (unsentCount > 0 && navigator.onLine) { banner.style.display = 'block'; banner.textContent = '⚠️ Не отправлено: ' + unsentCount + '. NAS недоступен? Проверю через ' + AUTO_RETRY_MINUTES + ' мин.'; } else { banner.style.display = 'none'; }
+  if (unsentCount > 0) { banner.style.display = 'block'; banner.textContent = '⚠️ Не отправлено: ' + unsentCount + '. NAS недоступен? Проверю через ' + AUTO_RETRY_MINUTES + ' мин.'; } else { banner.style.display = 'none'; }
   const diag = document.getElementById('diagInfo');
   if (diag) {
     const d = getSenderDisplay(); const u = getSenderUser();
